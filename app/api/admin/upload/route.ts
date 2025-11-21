@@ -51,7 +51,6 @@ export async function POST(request: Request): Promise<NextResponse> {
         console.log('[UPLOAD] Upload completed successfully');
         console.log('[UPLOAD] Blob URL:', blob.url);
         console.log('[UPLOAD] Blob pathname:', blob.pathname);
-        console.log('[UPLOAD] Blob size:', blob.size);
       },
     });
 

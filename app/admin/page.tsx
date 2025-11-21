@@ -39,28 +39,72 @@ export default function AdminPage() {
     setMessage(null);
 
     try {
-      const formData = new FormData();
-      formData.append('file', file);
-      formData.append('password', password);
+      const projectCode = file.name.replace('.zip', '').replace(/\s+/g, '-').toLowerCase();
 
-      const res = await fetch('/api/admin/upload', {
+      // 1. Upload zip dosyasını direkt Blob'a
+      setMessage({ type: 'success', text: 'Dosya yükleniyor... (1/2)' });
+      
+      const uploadRes = await fetch(`/api/admin/upload`, {
         method: 'POST',
-        body: formData,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          pathname: `temp/${projectCode}.zip`,
+          type: file.type,
+          clientPayload: password,
+        }),
       });
 
-      const data = await res.json();
+      if (!uploadRes.ok) {
+        const error = await uploadRes.json();
+        throw new Error(error.error || 'Upload başarısız');
+      }
 
-      if (res.ok) {
-        setMessage({ type: 'success', text: `Proje başarıyla yüklendi: ${data.projectCode}` });
+      const { url } = await uploadRes.json();
+
+      // 2. Dosyayı Blob URL'ine yükle
+      const putRes = await fetch(url, {
+        method: 'PUT',
+        headers: { 'Content-Type': file.type },
+        body: file,
+      });
+
+      if (!putRes.ok) {
+        throw new Error('Dosya yükleme başarısız');
+      }
+
+      const blob = await putRes.json();
+
+      // 3. Zip'i işle ve projeyi oluştur
+      setMessage({ type: 'success', text: 'Dosya işleniyor... (2/2)' });
+      
+      const processRes = await fetch('/api/admin/process-zip', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          blobUrl: blob.url,
+          projectCode,
+          password,
+        }),
+      });
+
+      const processData = await processRes.json();
+
+      if (processRes.ok) {
+        setMessage({ 
+          type: 'success', 
+          text: `✅ Proje başarıyla yüklendi: ${processData.projectCode} (${processData.filesUploaded} dosya)` 
+        });
         setFile(null);
-        // Reset file input
-        const fileInput = document.querySelector('input[type="file"]') as HTMLInputElement;
+        const fileInput = document.getElementById('file-input') as HTMLInputElement;
         if (fileInput) fileInput.value = '';
       } else {
-        setMessage({ type: 'error', text: data.error || 'Upload başarısız!' });
+        setMessage({ type: 'error', text: processData.error || 'İşlem başarısız!' });
       }
     } catch (error) {
-      setMessage({ type: 'error', text: 'Bir hata oluştu.' });
+      setMessage({ 
+        type: 'error', 
+        text: error instanceof Error ? error.message : 'Bir hata oluştu.' 
+      });
     } finally {
       setUploading(false);
     }

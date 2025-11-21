@@ -1,81 +1,43 @@
+import { handleUpload, type HandleUploadBody } from '@vercel/blob/client';
 import { NextRequest, NextResponse } from 'next/server';
-import { put } from '@vercel/blob';
-import JSZip from 'jszip';
 
 export const runtime = 'nodejs';
 export const maxDuration = 300; // 5 dakika timeout
 
-export async function POST(request: NextRequest) {
+export async function POST(request: NextRequest): Promise<NextResponse> {
+  const body = (await request.json()) as HandleUploadBody;
+
   try {
-    // Şifre kontrolü
-    const formData = await request.formData();
-    const password = formData.get('password') as string;
-    const file = formData.get('file') as File;
+    const jsonResponse = await handleUpload({
+      body,
+      request,
+      onBeforeGenerateToken: async (pathname, clientPayload) => {
+        // Şifre kontrolü
+        const password = clientPayload as string;
+        
+        if (!password || password !== process.env.ADMIN_PASSWORD) {
+          throw new Error('Yetkisiz erişim');
+        }
 
-    if (!password || password !== process.env.ADMIN_PASSWORD) {
-      return NextResponse.json(
-        { error: 'Yetkisiz erişim' },
-        { status: 401 }
-      );
-    }
-
-    if (!file) {
-      return NextResponse.json(
-        { error: 'Dosya bulunamadı' },
-        { status: 400 }
-      );
-    }
-
-    // Zip dosyasını aç
-    const arrayBuffer = await file.arrayBuffer();
-    const zip = await JSZip.loadAsync(arrayBuffer);
-
-    // Proje kodu: zip dosyasının adından .zip uzantısını çıkar
-    const projectCode = file.name.replace('.zip', '');
-
-    // Config.json ve images klasörünü kontrol et
-    const configFile = zip.file('config.json');
-    if (!configFile) {
-      return NextResponse.json(
-        { error: 'Zip içinde config.json bulunamadı' },
-        { status: 400 }
-      );
-    }
-
-    // Tüm dosyaları Blob'a yükle
-    const uploadPromises: Promise<any>[] = [];
-    const uploadedFiles: string[] = [];
-
-    for (const [filename, zipEntry] of Object.entries(zip.files)) {
-      if (zipEntry.dir) continue; // Klasörleri atla
-
-      const content = await zipEntry.async('blob');
-      const blobPath = `projects/${projectCode}/${filename}`;
-
-      const uploadPromise = put(blobPath, content, {
-        access: 'public',
-        addRandomSuffix: false,
-      }).then((blob) => {
-        uploadedFiles.push(blob.url);
-        return blob;
-      });
-
-      uploadPromises.push(uploadPromise);
-    }
-
-    await Promise.all(uploadPromises);
-
-    return NextResponse.json({
-      success: true,
-      projectCode,
-      filesUploaded: uploadedFiles.length,
-      files: uploadedFiles,
+        return {
+          allowedContentTypes: ['application/zip', 'application/x-zip-compressed'],
+          tokenPayload: JSON.stringify({
+            uploadedBy: 'admin',
+          }),
+        };
+      },
+      onUploadCompleted: async ({ blob, tokenPayload }) => {
+        console.log('Upload completed:', blob.url);
+        // Burada isterseniz database'e kayıt yapabilirsiniz
+      },
     });
+
+    return NextResponse.json(jsonResponse);
   } catch (error) {
     console.error('Upload error:', error);
     return NextResponse.json(
-      { error: 'Upload sırasında bir hata oluştu', details: String(error) },
-      { status: 500 }
+      { error: error instanceof Error ? error.message : 'Upload failed' },
+      { status: 400 }
     );
   }
 }

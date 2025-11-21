@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { Upload, Loader2, CheckCircle, XCircle } from 'lucide-react';
+import { upload } from '@vercel/blob/client';
 
 export default function AdminPage() {
   const [password, setPassword] = useState('');
@@ -41,27 +42,16 @@ export default function AdminPage() {
     try {
       const projectCode = file.name.replace('.zip', '').replace(/\s+/g, '-').toLowerCase();
 
-      // 1. Upload zip dosyasını Blob'a
+      // 1. Upload direkt Blob'a (client-side, API'yi bypass eder)
       setMessage({ type: 'success', text: 'Dosya yükleniyor... (1/2)' });
       
-      const formData = new FormData();
-      formData.append('file', file);
-      formData.append('projectCode', projectCode);
-
-      const uploadRes = await fetch('/api/admin/upload', {
-        method: 'POST',
-        headers: {
-          'x-admin-password': password,
-        },
-        body: formData,
+      const blob = await upload(file.name, file, {
+        access: 'public',
+        handleUploadUrl: '/api/admin/upload',
+        clientPayload: JSON.stringify({ password }),
       });
 
-      if (!uploadRes.ok) {
-        const error = await uploadRes.json();
-        throw new Error(error.error || 'Upload başarısız');
-      }
-
-      const { blobUrl } = await uploadRes.json();
+      console.log('Blob uploaded:', blob.url);
 
       // 2. Zip'i işle ve projeyi oluştur
       setMessage({ type: 'success', text: 'Dosya işleniyor... (2/2)' });
@@ -70,7 +60,7 @@ export default function AdminPage() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          blobUrl,
+          blobUrl: blob.url,
           projectCode,
           password,
         }),
@@ -90,6 +80,7 @@ export default function AdminPage() {
         setMessage({ type: 'error', text: processData.error || 'İşlem başarısız!' });
       }
     } catch (error) {
+      console.error('Upload error:', error);
       setMessage({ 
         type: 'error', 
         text: error instanceof Error ? error.message : 'Bir hata oluştu.' 

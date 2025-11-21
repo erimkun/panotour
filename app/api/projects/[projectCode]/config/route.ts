@@ -7,8 +7,10 @@ export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ projectCode: string }> }
 ) {
+  const resolvedParams = await params;
+  const { projectCode } = resolvedParams;
+  
   try {
-    const { projectCode } = await params;
     console.log(`[CONFIG] Request for project: ${projectCode}`);
 
     // 1. Try to read from local public/projects first

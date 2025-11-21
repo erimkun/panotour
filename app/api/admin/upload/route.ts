@@ -35,15 +35,23 @@ export async function POST(request: Request): Promise<NextResponse> {
 
         console.log('[UPLOAD] Auth successful, generating token');
 
+        // Dosyayı temp/ klasörüne kaydet
+        const newPathname = `temp/${pathname}`;
+        console.log('[UPLOAD] Using pathname:', newPathname);
+
         return {
           allowedContentTypes: ['application/zip', 'application/x-zip-compressed'],
           tokenPayload: JSON.stringify({
             userId: 'admin',
+            pathname: newPathname,
           }),
         };
       },
       onUploadCompleted: async ({ blob, tokenPayload }) => {
-        console.log('[UPLOAD] Completed:', blob.pathname, blob.url);
+        console.log('[UPLOAD] Upload completed successfully');
+        console.log('[UPLOAD] Blob URL:', blob.url);
+        console.log('[UPLOAD] Blob pathname:', blob.pathname);
+        console.log('[UPLOAD] Blob size:', blob.size);
       },
     });
 

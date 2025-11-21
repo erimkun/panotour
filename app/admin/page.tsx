@@ -49,9 +49,11 @@ export default function AdminPage() {
         access: 'public',
         handleUploadUrl: '/api/admin/upload',
         clientPayload: JSON.stringify({ password }),
+        pathname: `temp/${file.name}`, // Temp klasörüne kaydet
       });
 
       console.log('Blob uploaded:', blob.url);
+      console.log('Blob pathname:', blob.pathname);
 
       // 2. Zip'i işle ve projeyi oluştur
       setMessage({ type: 'success', text: 'Dosya işleniyor... (2/2)' });

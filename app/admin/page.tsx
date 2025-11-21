@@ -45,11 +45,10 @@ export default function AdminPage() {
       // 1. Upload direkt Blob'a (client-side, API'yi bypass eder)
       setMessage({ type: 'success', text: 'Dosya yükleniyor... (1/2)' });
       
-      const blob = await upload(file.name, file, {
+      const blob = await upload(`temp/${file.name}`, file, {
         access: 'public',
         handleUploadUrl: '/api/admin/upload',
         clientPayload: JSON.stringify({ password }),
-        pathname: `temp/${file.name}`, // Temp klasörüne kaydet
       });
 
       console.log('Blob uploaded:', blob.url);

@@ -9,12 +9,31 @@ export async function POST(request: Request): Promise<NextResponse> {
       body,
       request,
       onBeforeGenerateToken: async (pathname, clientPayload) => {
-        // Şifre kontrolü
-        const password = (clientPayload as any)?.password;
+        console.log('[UPLOAD] onBeforeGenerateToken called');
+        console.log('[UPLOAD] clientPayload:', clientPayload);
+        console.log('[UPLOAD] pathname:', pathname);
+        
+        // clientPayload string olarak gelir, parse et
+        let password: string | undefined;
+        try {
+          const payload = JSON.parse(clientPayload || '{}');
+          password = payload.password;
+        } catch (e) {
+          console.error('[UPLOAD] Failed to parse clientPayload:', e);
+          throw new Error('Invalid payload');
+        }
+        
+        console.log('[UPLOAD] Password check:', { 
+          hasPassword: !!password, 
+          hasEnvPassword: !!process.env.ADMIN_PASSWORD 
+        });
         
         if (!password || password !== process.env.ADMIN_PASSWORD) {
+          console.error('[UPLOAD] Auth failed');
           throw new Error('Yetkisiz erişim');
         }
+
+        console.log('[UPLOAD] Auth successful, generating token');
 
         return {
           allowedContentTypes: ['application/zip', 'application/x-zip-compressed'],
@@ -24,12 +43,13 @@ export async function POST(request: Request): Promise<NextResponse> {
         };
       },
       onUploadCompleted: async ({ blob, tokenPayload }) => {
-        console.log('[UPLOAD] Completed:', blob.pathname);
+        console.log('[UPLOAD] Completed:', blob.pathname, blob.url);
       },
     });
 
     return NextResponse.json(jsonResponse);
   } catch (error) {
+    console.error('[UPLOAD] Error:', error);
     return NextResponse.json(
       { error: (error as Error).message },
       { status: 400 },

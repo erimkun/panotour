@@ -38,11 +38,12 @@ export async function GET(
           return [filename, b.url];
         }));
 
-        // Update image paths in config
+        // Update image and audio paths in config
         if (config.scenes) {
           config.scenes = config.scenes.map((scene: any) => ({
             ...scene,
             image: blobMap.get(`images/${scene.image}`) || scene.image,
+            audio: scene.audio ? (blobMap.get(`audio/${scene.audio}`) || scene.audio) : scene.audio,
             hotspots: scene.hotspots?.map((hs: any) => ({
               ...hs,
               image: hs.image ? (blobMap.get(`images/${hs.image}`) || hs.image) : hs.image,

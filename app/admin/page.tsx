@@ -127,21 +127,39 @@ export default function AdminPage() {
           </div>
 
           <form onSubmit={handleUpload} className="space-y-6">
-            <div className="border-2 border-dashed border-gray-300 rounded-xl p-8 text-center hover:border-indigo-400 transition">
+            <div 
+              className="border-2 border-dashed border-gray-300 rounded-xl p-8 text-center hover:border-indigo-400 transition cursor-pointer"
+              onDragOver={(e) => {
+                e.preventDefault();
+                e.currentTarget.classList.add('border-indigo-500', 'bg-indigo-50');
+              }}
+              onDragLeave={(e) => {
+                e.currentTarget.classList.remove('border-indigo-500', 'bg-indigo-50');
+              }}
+              onDrop={(e) => {
+                e.preventDefault();
+                e.currentTarget.classList.remove('border-indigo-500', 'bg-indigo-50');
+                const droppedFile = e.dataTransfer.files[0];
+                if (droppedFile && droppedFile.name.endsWith('.zip')) {
+                  setFile(droppedFile);
+                }
+              }}
+              onClick={() => document.getElementById('file-input')?.click()}
+            >
               <Upload className="w-12 h-12 text-gray-400 mx-auto mb-4" />
-              <label className="cursor-pointer">
-                <span className="text-indigo-600 font-medium hover:text-indigo-700">
-                  Dosya Seç
-                </span>
-                <input
-                  type="file"
-                  accept=".zip"
-                  onChange={(e) => setFile(e.target.files?.[0] || null)}
-                  className="hidden"
-                  required
-                />
-              </label>
-              <p className="text-gray-500 text-sm mt-2">Sadece .zip dosyaları</p>
+              <p className="text-indigo-600 font-medium hover:text-indigo-700 mb-2">
+                Dosya Seç veya Sürükle Bırak
+              </p>
+              <p className="text-gray-500 text-sm">Sadece .zip dosyaları</p>
+              
+              <input
+                id="file-input"
+                type="file"
+                accept=".zip"
+                onChange={(e) => setFile(e.target.files?.[0] || null)}
+                className="hidden"
+                required
+              />
               
               {file && (
                 <div className="mt-4 p-3 bg-indigo-50 rounded-lg inline-block">

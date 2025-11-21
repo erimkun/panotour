@@ -1,43 +1,56 @@
-import { handleUpload, type HandleUploadBody } from '@vercel/blob/client';
 import { NextRequest, NextResponse } from 'next/server';
+import { put } from '@vercel/blob';
 
-export const runtime = 'nodejs';
-export const maxDuration = 300; // 5 dakika timeout
+// Edge runtime kullan - body size limiti yok
+export const runtime = 'edge';
 
-export async function POST(request: NextRequest): Promise<NextResponse> {
-  const body = (await request.json()) as HandleUploadBody;
-
+export async function POST(request: NextRequest) {
   try {
-    const jsonResponse = await handleUpload({
-      body,
-      request,
-      onBeforeGenerateToken: async (pathname, clientPayload) => {
-        // Şifre kontrolü
-        const password = clientPayload as string;
-        
-        if (!password || password !== process.env.ADMIN_PASSWORD) {
-          throw new Error('Yetkisiz erişim');
-        }
+    // Şifre kontrolü
+    const password = request.headers.get('x-admin-password');
+    
+    if (!password || password !== process.env.ADMIN_PASSWORD) {
+      return NextResponse.json(
+        { error: 'Yetkisiz erişim' },
+        { status: 401 }
+      );
+    }
 
-        return {
-          allowedContentTypes: ['application/zip', 'application/x-zip-compressed'],
-          tokenPayload: JSON.stringify({
-            uploadedBy: 'admin',
-          }),
-        };
-      },
-      onUploadCompleted: async ({ blob, tokenPayload }) => {
-        console.log('Upload completed:', blob.url);
-        // Burada isterseniz database'e kayıt yapabilirsiniz
-      },
+    // FormData'yı al
+    const formData = await request.formData();
+    const file = formData.get('file') as File;
+    const projectCode = formData.get('projectCode') as string;
+
+    if (!file || !projectCode) {
+      return NextResponse.json(
+        { error: 'Dosya veya proje kodu eksik' },
+        { status: 400 }
+      );
+    }
+
+    console.log(`[UPLOAD] Starting upload: ${projectCode}, size: ${file.size} bytes`);
+
+    // Dosyayı direkt Blob'a yükle (stream olarak)
+    const blob = await put(`temp/${projectCode}.zip`, file, {
+      access: 'public',
+      addRandomSuffix: false,
     });
 
-    return NextResponse.json(jsonResponse);
+    console.log(`[UPLOAD] Upload complete: ${blob.url}`);
+
+    return NextResponse.json({
+      success: true,
+      blobUrl: blob.url,
+      projectCode,
+    });
   } catch (error) {
-    console.error('Upload error:', error);
+    console.error('[UPLOAD] Error:', error);
     return NextResponse.json(
-      { error: error instanceof Error ? error.message : 'Upload failed' },
-      { status: 400 }
+      { 
+        error: error instanceof Error ? error.message : 'Upload başarısız',
+        details: String(error)
+      },
+      { status: 500 }
     );
   }
 }

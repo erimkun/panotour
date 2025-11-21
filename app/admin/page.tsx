@@ -41,17 +41,19 @@ export default function AdminPage() {
     try {
       const projectCode = file.name.replace('.zip', '').replace(/\s+/g, '-').toLowerCase();
 
-      // 1. Upload zip dosyasını direkt Blob'a
+      // 1. Upload zip dosyasını Blob'a
       setMessage({ type: 'success', text: 'Dosya yükleniyor... (1/2)' });
       
-      const uploadRes = await fetch(`/api/admin/upload`, {
+      const formData = new FormData();
+      formData.append('file', file);
+      formData.append('projectCode', projectCode);
+
+      const uploadRes = await fetch('/api/admin/upload', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          pathname: `temp/${projectCode}.zip`,
-          type: file.type,
-          clientPayload: password,
-        }),
+        headers: {
+          'x-admin-password': password,
+        },
+        body: formData,
       });
 
       if (!uploadRes.ok) {
@@ -59,29 +61,16 @@ export default function AdminPage() {
         throw new Error(error.error || 'Upload başarısız');
       }
 
-      const { url } = await uploadRes.json();
+      const { blobUrl } = await uploadRes.json();
 
-      // 2. Dosyayı Blob URL'ine yükle
-      const putRes = await fetch(url, {
-        method: 'PUT',
-        headers: { 'Content-Type': file.type },
-        body: file,
-      });
-
-      if (!putRes.ok) {
-        throw new Error('Dosya yükleme başarısız');
-      }
-
-      const blob = await putRes.json();
-
-      // 3. Zip'i işle ve projeyi oluştur
+      // 2. Zip'i işle ve projeyi oluştur
       setMessage({ type: 'success', text: 'Dosya işleniyor... (2/2)' });
       
       const processRes = await fetch('/api/admin/process-zip', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          blobUrl: blob.url,
+          blobUrl,
           projectCode,
           password,
         }),

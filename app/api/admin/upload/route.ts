@@ -36,7 +36,7 @@ export async function POST(request: Request): Promise<NextResponse> {
         console.log('[UPLOAD] Auth successful, generating token');
 
         // Dosyayı temp/ klasörüne kaydet
-        const newPathname = `temp/${pathname}`;
+        const newPathname = pathname.startsWith('temp/') ? pathname : `temp/${pathname}`;
         console.log('[UPLOAD] Using pathname:', newPathname);
 
         return {

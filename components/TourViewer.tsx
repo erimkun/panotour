@@ -233,17 +233,17 @@ export default function TourViewer({ config, projectCode }: TourViewerProps) {
 
       {/* Scene Info Overlay - Top Left */}
       {currentScene?.metadata && currentScene.metadata.length > 0 && (
-        <div className="absolute top-4 left-4 ml-4 z-40 max-w-xs animate-in slide-in-from-left-4 duration-500">
-           <div className="bg-black/40 backdrop-blur-md border border-white/10 p-4 rounded-xl shadow-lg text-white">
-              <h2 className="text-lg font-bold mb-3 border-b border-white/10 pb-2">{currentScene.title}</h2>
-              <div className="space-y-2">
+        <div className="absolute top-4 left-4 ml-8 z-40 max-w-sm animate-in slide-in-from-left-4 duration-500">
+           <div className="bg-black/40 backdrop-blur-md border border-white/10 p-6 rounded-xl shadow-lg text-white">
+              <h2 className="text-xl font-bold mb-4 border-b border-white/10 pb-3">{currentScene.title}</h2>
+              <div className="space-y-3">
                   {currentScene.metadata.map((item, idx) => {
                       // @ts-ignore - Dynamic access to Lucide icons
                       const IconComp = item.icon ? LucideIcons[item.icon] : null;
                       return (
-                        <div key={idx} className="flex justify-between items-center text-sm">
-                            <div className="flex items-center gap-2 mr-4">
-                                {IconComp && <IconComp size={16} style={{ color: item.color || '#e2e8f0' }} />}
+                        <div key={idx} className="flex justify-between items-center text-base">
+                            <div className="flex items-center gap-3 mr-6">
+                                {IconComp && <IconComp size={18} style={{ color: item.color || '#e2e8f0' }} />}
                                 <span className="font-bold" style={{ color: item.color || '#e2e8f0' }}>{item.label}</span>
                             </div>
                             <span className="font-light text-white/90">{item.value}</span>

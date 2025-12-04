@@ -129,6 +129,8 @@ export default function TourViewer({ config, projectCode }: TourViewerProps) {
           autoLoad: true,
           showControls: true,
           showTitle: false,
+          minHfov: 50, // En yakın zoom (dar açı)
+          maxHfov: 120, // En uzak zoom (geniş açı)
         },
         scenes: scenes,
       });

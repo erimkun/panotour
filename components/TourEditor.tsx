@@ -49,6 +49,16 @@ export default function TourEditor({ initialConfig, projectCode }: TourEditorPro
   const viewerInstanceRef = useRef<any>(null);
   const [isPicking, setIsPicking] = useState(false);
   const [tempHotspot, setTempHotspot] = useState<{pitch: number, yaw: number} | null>(null);
+  const [yaw, setYaw] = useState(0);
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      if (viewerInstanceRef.current) {
+        setYaw(viewerInstanceRef.current.getYaw());
+      }
+    }, 100);
+    return () => clearInterval(interval);
+  }, []);
   const [isAddingScene, setIsAddingScene] = useState(false);
   const [newSceneData, setNewSceneData] = useState({ id: '', title: '', image: '' });
   const [availableImages, setAvailableImages] = useState<string[]>([]);
@@ -1313,9 +1323,22 @@ export default function TourEditor({ initialConfig, projectCode }: TourEditorPro
                             {/* Direction indicator for active scene */}
                             {s.id === activeSceneId && (
                                 <div 
-                                    className="absolute top-1/2 left-1/2 w-0 h-0 border-l-[6px] border-l-transparent border-r-[6px] border-r-transparent border-b-[12px] border-b-white -translate-x-1/2 -translate-y-1/2"
-                                    style={{ transform: 'translate(-50%, -100%)' }}
-                                />
+                                    className="absolute top-1/2 left-1/2 w-[60px] h-[60px] pointer-events-none"
+                                    style={{ 
+                                        transform: `translate(-50%, -50%) rotate(${yaw}deg)`,
+                                        transformOrigin: 'center' 
+                                    }}
+                                >
+                                    <svg viewBox="0 0 100 100" className="w-full h-full">
+                                        <path 
+                                            d="M50 50 L15 0 A50 50 0 0 1 85 0 Z" 
+                                            fill={config.minimapSettings?.coneColor || "rgba(59, 130, 246, 0.8)"} 
+                                            fillOpacity={config.minimapSettings?.coneOpacity || 0.5}
+                                            stroke={config.minimapSettings?.coneBorder ? (config.minimapSettings?.coneBorderColor || "white") : "none"}
+                                            strokeWidth={config.minimapSettings?.coneBorder ? 2 : 0}
+                                        />
+                                    </svg>
+                                </div>
                             )}
                         </div>
                     ))}
@@ -1351,6 +1374,67 @@ export default function TourEditor({ initialConfig, projectCode }: TourEditorPro
                         </div>
                     </div>
                 )}
+
+                {/* Minimap Settings */}
+                <div className="mt-4 border-t border-gray-700 pt-4">
+                    <h4 className="text-sm font-semibold mb-2">Minimap Appearance</h4>
+                    <div className="space-y-2">
+                        <div>
+                            <label className="block text-xs text-gray-400 mb-1">Cone Color</label>
+                            <input 
+                                type="color" 
+                                value={config.minimapSettings?.coneColor || "#3b82f6"}
+                                onChange={(e) => setConfig({
+                                    ...config,
+                                    minimapSettings: { ...config.minimapSettings, coneColor: e.target.value }
+                                })}
+                                className="w-full h-6 rounded cursor-pointer bg-gray-800 border border-gray-700"
+                            />
+                        </div>
+                        <div>
+                            <label className="block text-xs text-gray-400 mb-1">Opacity ({config.minimapSettings?.coneOpacity || 0.5})</label>
+                            <input 
+                                type="range" 
+                                min="0.1" 
+                                max="1" 
+                                step="0.1"
+                                value={config.minimapSettings?.coneOpacity || 0.5}
+                                onChange={(e) => setConfig({
+                                    ...config,
+                                    minimapSettings: { ...config.minimapSettings, coneOpacity: parseFloat(e.target.value) }
+                                })}
+                                className="w-full h-2 bg-gray-700 rounded-lg appearance-none cursor-pointer accent-blue-600"
+                            />
+                        </div>
+                        <div className="flex items-center gap-2">
+                            <input 
+                                type="checkbox" 
+                                id="coneBorder"
+                                checked={config.minimapSettings?.coneBorder || false}
+                                onChange={(e) => setConfig({
+                                    ...config,
+                                    minimapSettings: { ...config.minimapSettings, coneBorder: e.target.checked }
+                                })}
+                                className="rounded bg-gray-700 border-gray-600 text-blue-600 focus:ring-blue-500"
+                            />
+                            <label htmlFor="coneBorder" className="text-xs text-gray-300">Show Border</label>
+                        </div>
+                        {config.minimapSettings?.coneBorder && (
+                            <div>
+                                <label className="block text-xs text-gray-400 mb-1">Border Color</label>
+                                <input 
+                                    type="color" 
+                                    value={config.minimapSettings?.coneBorderColor || "#ffffff"}
+                                    onChange={(e) => setConfig({
+                                        ...config,
+                                        minimapSettings: { ...config.minimapSettings, coneBorderColor: e.target.value }
+                                    })}
+                                    className="w-full h-6 rounded cursor-pointer bg-gray-800 border border-gray-700"
+                                />
+                            </div>
+                        )}
+                    </div>
+                </div>
             </div>
         )}
 

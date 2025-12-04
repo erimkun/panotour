@@ -317,13 +317,21 @@ export default function TourViewer({ config, projectCode }: TourViewerProps) {
                                 }}
                             >
                                 <svg viewBox="0 0 100 100" className="w-full h-full">
-                                    <path d="M50 50 L15 0 A50 50 0 0 1 85 0 Z" fill="url(#radar-gradient)" opacity="0.5" />
-                                    <defs>
-                                        <radialGradient id="radar-gradient" cx="0.5" cy="0.5" r="0.5">
-                                            <stop offset="0%" stopColor="rgba(59, 130, 246, 0.8)" />
-                                            <stop offset="100%" stopColor="rgba(59, 130, 246, 0)" />
-                                        </radialGradient>
-                                    </defs>
+                                    <path 
+                                        d="M50 50 L15 0 A50 50 0 0 1 85 0 Z" 
+                                        fill={config.minimapSettings?.coneColor || "url(#radar-gradient)"} 
+                                        fillOpacity={config.minimapSettings?.coneOpacity || 0.5}
+                                        stroke={config.minimapSettings?.coneBorder ? (config.minimapSettings?.coneBorderColor || "white") : "none"}
+                                        strokeWidth={config.minimapSettings?.coneBorder ? 2 : 0}
+                                    />
+                                    {!config.minimapSettings?.coneColor && (
+                                        <defs>
+                                            <radialGradient id="radar-gradient" cx="0.5" cy="0.5" r="0.5">
+                                                <stop offset="0%" stopColor="rgba(59, 130, 246, 0.8)" />
+                                                <stop offset="100%" stopColor="rgba(59, 130, 246, 0)" />
+                                            </radialGradient>
+                                        </defs>
+                                    )}
                                 </svg>
                             </div>
                         )}

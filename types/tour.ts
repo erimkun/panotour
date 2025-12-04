@@ -48,4 +48,11 @@ export interface TourConfig {
   scenes: Scene[];
   initialSceneId: string;
   floorplanImage?: string; // Filename of the floorplan image
+  minimapSettings?: {
+    coneColor?: string;
+    coneOpacity?: number;
+    coneBorder?: boolean;
+    coneBorderColor?: string;
+    coneSize?: number;
+  };
 }

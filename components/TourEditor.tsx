@@ -511,6 +511,14 @@ export default function TourEditor({ initialConfig, projectCode }: TourEditorPro
       setTimeout(() => setViewSavedMessage(false), 3000);
   };
 
+  const handleSetStartScene = () => {
+      if (!activeSceneId) return;
+      setConfig(prev => ({
+          ...prev,
+          initialSceneId: activeSceneId
+      }));
+  };
+
   const handleAddScene = () => {
     if (!newSceneData.id || !newSceneData.title || !newSceneData.image) return;
     
@@ -754,11 +762,12 @@ export default function TourEditor({ initialConfig, projectCode }: TourEditorPro
                     <button
                         key={scene.id}
                         onClick={() => setActiveSceneId(scene.id)}
-                        className={`w-full text-left p-3 rounded-lg transition-colors ${
+                        className={`w-full text-left p-3 rounded-lg transition-colors flex justify-between items-center ${
                             activeSceneId === scene.id ? 'bg-blue-600 text-white' : 'bg-gray-800 hover:bg-gray-700'
                         }`}
                     >
-                        {scene.title}
+                        <span>{scene.title}</span>
+                        {config.initialSceneId === scene.id && <span title="Starting Scene">🏠</span>}
                     </button>
                 ))}
             </div>
@@ -815,6 +824,25 @@ export default function TourEditor({ initialConfig, projectCode }: TourEditorPro
                                     <span>✅</span> Görünüm Ayarlandı
                                 </div>
                             )}
+                        </div>
+
+                        <div>
+                            <label className="block text-xs text-gray-400 mb-1">Start Scene</label>
+                            <button 
+                                onClick={handleSetStartScene}
+                                disabled={config.initialSceneId === activeSceneId}
+                                className={`w-full text-xs py-2 rounded flex items-center justify-center gap-2 transition-colors ${
+                                    config.initialSceneId === activeSceneId 
+                                    ? 'bg-green-600/50 text-white cursor-default' 
+                                    : 'bg-gray-700 hover:bg-gray-600'
+                                }`}
+                            >
+                                {config.initialSceneId === activeSceneId ? (
+                                    <><span>🏠</span> Starting Scene</>
+                                ) : (
+                                    <><span>🏠</span> Set as Starting Scene</>
+                                )}
+                            </button>
                         </div>
 
                         <div>

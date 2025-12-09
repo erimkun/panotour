@@ -107,7 +107,7 @@ export default function TourViewer({ config, projectCode }: TourViewerProps) {
           panorama: scene.image.startsWith('http') ? scene.image : `/projects/${projectCode}/images/${encodeURIComponent(scene.image)}`,
           pitch: scene.initialView?.pitch || 0,
           yaw: scene.initialView?.yaw || 0,
-          hfov: scene.initialView?.hfov || defaultHfov,
+          hfov: isMobile ? 90 : (scene.initialView?.hfov || 115),
           hotSpots: scene.hotspots.map((hs) => ({
             pitch: hs.pitch,
             yaw: hs.yaw,
@@ -132,8 +132,8 @@ export default function TourViewer({ config, projectCode }: TourViewerProps) {
           autoLoad: true,
           showControls: true,
           showTitle: false,
-          minHfov: 50, // En yakın zoom (dar açı)
-          maxHfov: 130, // En uzak zoom (geniş açı)
+          minHfov: isMobile ? 60 : 50, // En yakın zoom (dar açı)
+          maxHfov: isMobile ? 100 : 130, // En uzak zoom (geniş açı)
         },
         scenes: scenes,
       });

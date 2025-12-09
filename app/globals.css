@@ -72,3 +72,10 @@ body {
     transform: rotate(360deg);
   }
 }
+
+@media (max-width: 768px) {
+  .hotspot-wrapper {
+    transform: scale(0.6);
+    transform-origin: center;
+  }
+}

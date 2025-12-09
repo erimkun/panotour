@@ -82,6 +82,9 @@ export default function TourViewer({ config, projectCode }: TourViewerProps) {
     const initPannellum = async () => {
       if (typeof window === 'undefined') return;
       
+      const isMobile = window.innerWidth < 768;
+      const defaultHfov = isMobile ? 90 : 115; // Reduced FOV for mobile
+
       // We need to ensure pannellum css is loaded
       // import('pannellum/src/css/pannellum.css'); 
       // The above import might fail if node_modules structure is weird. 
@@ -104,7 +107,7 @@ export default function TourViewer({ config, projectCode }: TourViewerProps) {
           panorama: scene.image.startsWith('http') ? scene.image : `/projects/${projectCode}/images/${encodeURIComponent(scene.image)}`,
           pitch: scene.initialView?.pitch || 0,
           yaw: scene.initialView?.yaw || 0,
-          hfov: scene.initialView?.hfov || 115,
+          hfov: scene.initialView?.hfov || defaultHfov,
           hotSpots: scene.hotspots.map((hs) => ({
             pitch: hs.pitch,
             yaw: hs.yaw,
@@ -156,7 +159,7 @@ export default function TourViewer({ config, projectCode }: TourViewerProps) {
     
     // Create wrapper for border animation
     const wrapper = document.createElement('div');
-    wrapper.className = 'relative';
+    wrapper.className = 'relative hotspot-wrapper';
     wrapper.style.display = 'inline-block';
     
     // Animated border for info hotspots
@@ -235,17 +238,20 @@ export default function TourViewer({ config, projectCode }: TourViewerProps) {
 
       {/* Scene Info Overlay - Top Left */}
       {currentScene?.metadata && currentScene.metadata.length > 0 && (
-        <div className="absolute top-4 left-4 ml-8 z-40 max-w-sm animate-in slide-in-from-left-4 duration-500">
-           <div className="bg-black/40 backdrop-blur-md border border-white/10 p-6 rounded-xl shadow-lg text-white">
-              <h2 className="text-xl font-bold mb-4 border-b border-white/10 pb-3">{currentScene.title}</h2>
-              <div className="space-y-3">
+        <div 
+            className="absolute top-4 left-4 md:ml-8 z-40 max-w-[200px] md:max-w-sm animate-in slide-in-from-left-4 duration-500"
+            style={{ top: 'calc(1rem + env(safe-area-inset-top))' }}
+        >
+           <div className="bg-black/40 backdrop-blur-md border border-white/10 p-4 md:p-6 rounded-xl shadow-lg text-white">
+              <h2 className="text-base md:text-xl font-bold mb-2 md:mb-4 border-b border-white/10 pb-2 md:pb-3">{currentScene.title}</h2>
+              <div className="space-y-2 md:space-y-3">
                   {currentScene.metadata.map((item, idx) => {
                       // @ts-ignore - Dynamic access to Lucide icons
                       const IconComp = item.icon ? LucideIcons[item.icon] : null;
                       return (
-                        <div key={idx} className="flex justify-between items-center text-base">
-                            <div className="flex items-center gap-3 mr-6">
-                                {IconComp && <IconComp size={18} style={{ color: item.color || '#e2e8f0' }} />}
+                        <div key={idx} className="flex justify-between items-center text-xs md:text-base">
+                            <div className="flex items-center gap-2 md:gap-3 mr-2 md:mr-6">
+                                {IconComp && <IconComp size={16} className="w-4 h-4 md:w-[18px] md:h-[18px]" style={{ color: item.color || '#e2e8f0' }} />}
                                 <span className="font-bold" style={{ color: item.color || '#e2e8f0' }}>{item.label}</span>
                             </div>
                             <span className="font-light text-white/90">{item.value}</span>
@@ -286,7 +292,10 @@ export default function TourViewer({ config, projectCode }: TourViewerProps) {
 
       {/* Minimap Overlay */}
       {config.floorplanImage && (
-          <div className="absolute top-4 right-4 w-48 md:w-64">
+          <div 
+            className="absolute top-4 right-4 w-32 md:w-64"
+            style={{ top: 'calc(1rem + env(safe-area-inset-top))' }}
+          >
               <div className="bg-black/40 backdrop-blur-md border border-white/20 rounded-xl overflow-hidden shadow-2xl transition-opacity hover:opacity-100 opacity-80 aspect-square">
                   <div className="relative w-full h-full p-0.5">
                       <img 

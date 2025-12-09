@@ -75,7 +75,7 @@ body {
 
 @media (max-width: 768px) {
   .hotspot-wrapper {
-    transform: scale(0.6);
+    transform: scale(0.5);
     transform-origin: center;
   }
 }

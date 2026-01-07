@@ -6,6 +6,7 @@ import { TourConfig, Hotspot } from '@/types/tour';
 import * as LucideIcons from 'lucide-react';
 import { X } from 'lucide-react';
 import clsx from 'clsx';
+import XRButton from './XRButton';
 
 // We'll load pannellum via a script tag or dynamic import to avoid SSR issues
 // But for now, let's assume we can import it. If not, we'll fix it.
@@ -232,9 +233,31 @@ export default function TourViewer({ config, projectCode }: TourViewerProps) {
     hotSpotDiv.classList.add('group'); // For hover effect
   };
 
+  // Get current pitch for VR mode
+  const getCurrentPitch = () => {
+    if (viewerInstanceRef.current) {
+      return viewerInstanceRef.current.getPitch();
+    }
+    return 0;
+  };
+
   return (
     <div className="relative w-full h-full bg-black">
       <div ref={viewerContainerRef} className="w-full h-full" />
+
+      {/* VR Mode Button - Bottom Left */}
+      <div 
+        className="absolute bottom-4 left-4 z-50"
+        style={{ bottom: 'calc(1rem + env(safe-area-inset-bottom))' }}
+      >
+        <XRButton
+          config={config}
+          projectCode={projectCode}
+          currentSceneId={currentSceneId}
+          currentPitch={getCurrentPitch()}
+          currentYaw={yaw}
+        />
+      </div>
 
       {/* Scene Info Overlay - Top Left */}
       {currentScene?.metadata && currentScene.metadata.length > 0 && (

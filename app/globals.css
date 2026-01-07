@@ -1,21 +1,35 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
 @import "tailwindcss";
 
 :root {
-  --background: #0f172a;
+  --background: #1d1a15;
   --foreground: #f8fafc;
+  --primary: #D0BB95;
+  --editor-bg: #1d1a15;
+  --editor-panel: #152228;
+  --editor-border: #3d3428;
 }
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
+  --color-primary: var(--primary);
+  --color-editor-bg: var(--editor-bg);
+  --color-editor-panel: var(--editor-panel);
+  --color-editor-border: var(--editor-border);
+  --font-sans: 'Inter', var(--font-geist-sans), system-ui, sans-serif;
   --font-mono: var(--font-geist-mono);
 }
 
 body {
-  background: radial-gradient(circle at top left, #334155, #0f172a);
+  background-color: var(--background);
   color: var(--foreground);
   min-height: 100vh;
+  font-family: 'Inter', system-ui, Avenir, Helvetica, Arial, sans-serif;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
 /* Hide default Pannellum hotspot styles when using custom class */
@@ -71,6 +85,24 @@ body {
   to {
     transform: rotate(360deg);
   }
+}
+
+@keyframes fadeInUp {
+  0% { opacity: 0; transform: translateY(10px); }
+  100% { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes pulseGlow {
+  0%, 100% { box-shadow: 0 0 15px rgba(208, 187, 149, 0.4); }
+  50% { box-shadow: 0 0 25px rgba(208, 187, 149, 0.6); }
+}
+
+.animate-fade-in-up {
+  animation: fadeInUp 0.3s ease-out;
+}
+
+.animate-pulse-glow {
+  animation: pulseGlow 2s ease-in-out infinite;
 }
 
 @media (max-width: 768px) {

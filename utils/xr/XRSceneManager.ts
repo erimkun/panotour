@@ -234,7 +234,8 @@ export class XRSceneManager {
       hotspot.yaw,
       this.config.sphereRadius * 0.9
     );
-    group.position.set(position.x, position.y, position.z);
+    // Mirror X position to match the mirrored sphere geometry (scale -1, 1, 1)
+    group.position.set(-position.x, position.y, position.z);
     group.lookAt(0, 0, 0);
 
     // Main hotspot sprite
@@ -248,11 +249,13 @@ export class XRSceneManager {
     const sprite = new THREE.Sprite(spriteMaterial);
     const size = (hotspot.size || 1) * this.config.hotspotScale * 20;
     sprite.scale.set(size, size, 1);
+    sprite.renderOrder = 1; // Ensure drawn after sphere
     group.add(sprite);
 
     // Loading ring (initially invisible)
     const ring = this.createLoadingRing(hotspot);
     ring.visible = false;
+    ring.renderOrder = 1; // Ensure drawn after sphere
     group.add(ring);
 
     // Label sprite
@@ -267,6 +270,7 @@ export class XRSceneManager {
     label.scale.set(40, 10, 1);
     label.position.set(0, -size / 2 - 8, 0);
     label.visible = false;
+    label.renderOrder = 1; // Ensure drawn after sphere
     group.add(label);
 
     return { id: hotspot.id, hotspot, group, sprite, ring, label };

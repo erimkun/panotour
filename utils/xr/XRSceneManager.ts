@@ -83,7 +83,6 @@ export class XRSceneManager {
     geometry.scale(-1, 1, 1);
 
     const material = new THREE.MeshBasicMaterial({
-      side: THREE.BackSide,
       transparent: true,
       opacity: 1,
     });

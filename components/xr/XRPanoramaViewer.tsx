@@ -8,10 +8,11 @@
 
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { X, Volume2, VolumeX, Glasses } from 'lucide-react';
-import { Scene } from '@/types/tour';
+import { Scene, VRConfig, DEFAULT_VR_CONFIG } from '@/types/tour';
 import { XRPanoramaViewerProps, DEFAULT_XR_CONFIG, XRConfig, GazeState } from '@/types/xr';
 import { XRSceneManager } from '@/utils/xr/XRSceneManager';
 import { getImageUrl, getSceneTransitionHotspots, getSceneById } from '@/utils/panoramaUtils';
+import { getVRHotspotsForScene, getVRVisibleScenes, isSceneVisibleInVR } from '@/utils/vrConfigUtils';
 import { useXRSession } from '@/hooks/useXRSession';
 
 export default function XRPanoramaViewer({
@@ -21,6 +22,7 @@ export default function XRPanoramaViewer({
   initialPitch = 0,
   initialYaw = 0,
   xrConfig,
+  vrConfig,
   onExit,
   onSceneChange,
 }: XRPanoramaViewerProps) {
@@ -28,6 +30,9 @@ export default function XRPanoramaViewer({
   const sceneManagerRef = useRef<XRSceneManager | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const initializedRef = useRef(false);
+  
+  // Use provided vrConfig or default
+  const mergedVRConfig: VRConfig = vrConfig || DEFAULT_VR_CONFIG;
   
   const [currentSceneId, setCurrentSceneId] = useState(initialSceneId);
   const [isLoading, setIsLoading] = useState(true);
@@ -111,6 +116,12 @@ export default function XRPanoramaViewer({
 
     // Set up scene change callback
     manager.setOnSceneChange((sceneId) => {
+      // Check if scene is visible in VR
+      if (!isSceneVisibleInVR(sceneId, mergedVRConfig)) {
+        console.warn(`Scene ${sceneId} is hidden in VR mode`);
+        return;
+      }
+      
       setCurrentSceneId(sceneId);
       onSceneChange?.(sceneId);
       // Load the new scene
@@ -120,7 +131,8 @@ export default function XRPanoramaViewer({
         const imageUrl = getImageUrl(scene.image, projectCode);
         sceneManagerRef.current.transitionToPanorama(imageUrl, setLoadingProgress)
           .then(() => {
-            const hotspots = getSceneTransitionHotspots(scene);
+            // Use VR config to get hotspots with overrides applied
+            const hotspots = getVRHotspotsForScene(scene, mergedVRConfig);
             sceneManagerRef.current?.createHotspots(hotspots);
             setIsLoading(false);
           })
@@ -138,7 +150,8 @@ export default function XRPanoramaViewer({
       const imageUrl = getImageUrl(scene.image, projectCode);
       manager.loadPanorama(imageUrl, setLoadingProgress)
         .then(() => {
-          const hotspots = getSceneTransitionHotspots(scene);
+          // Use VR config to get hotspots with overrides applied
+          const hotspots = getVRHotspotsForScene(scene, mergedVRConfig);
           manager.createHotspots(hotspots);
           playSceneAudio(scene, false);
           setIsLoading(false);
@@ -192,6 +205,12 @@ export default function XRPanoramaViewer({
   const handleManualSceneChange = useCallback((sceneId: string) => {
     if (sceneId === currentSceneId) return;
     
+    // Check if scene is visible in VR
+    if (!isSceneVisibleInVR(sceneId, mergedVRConfig)) {
+      console.warn(`Scene ${sceneId} is hidden in VR mode`);
+      return;
+    }
+    
     setCurrentSceneId(sceneId);
     onSceneChange?.(sceneId);
     
@@ -201,7 +220,8 @@ export default function XRPanoramaViewer({
       const imageUrl = getImageUrl(scene.image, projectCode);
       sceneManagerRef.current.transitionToPanorama(imageUrl, setLoadingProgress)
         .then(() => {
-          const hotspots = getSceneTransitionHotspots(scene);
+          // Use VR config to get hotspots with overrides applied
+          const hotspots = getVRHotspotsForScene(scene, mergedVRConfig);
           sceneManagerRef.current?.createHotspots(hotspots);
           playSceneAudio(scene, isMuted);
           setIsLoading(false);
@@ -212,7 +232,7 @@ export default function XRPanoramaViewer({
           setIsLoading(false);
         });
     }
-  }, [config, projectCode, currentSceneId, onSceneChange, playSceneAudio, isMuted]);
+  }, [config, projectCode, currentSceneId, onSceneChange, playSceneAudio, isMuted, mergedVRConfig]);
 
   // Get remaining time for gaze
   const remainingTime = Math.ceil(
@@ -367,11 +387,11 @@ export default function XRPanoramaViewer({
         </div>
       )}
 
-      {/* Scene Navigation (Mini thumbnails) */}
+      {/* Scene Navigation (Mini thumbnails) - Only show VR visible scenes */}
       {!isLoading && config.scenes.length > 1 && (
         <div className="absolute left-4 top-1/2 -translate-y-1/2 z-10">
           <div className="flex flex-col gap-2 bg-black/40 backdrop-blur-md rounded-lg p-2 border border-white/10">
-            {config.scenes.map(scene => (
+            {getVRVisibleScenes(config, mergedVRConfig).map(scene => (
               <button
                 key={scene.id}
                 onClick={() => handleManualSceneChange(scene.id)}

@@ -4,7 +4,7 @@
  */
 
 import * as THREE from 'three';
-import { Hotspot, TourConfig } from './tour';
+import { Hotspot, TourConfig, VRConfig } from './tour';
 
 // XR Session States
 export type XRSessionMode = 'immersive-vr' | 'inline' | null;
@@ -47,6 +47,7 @@ export interface XRPanoramaViewerProps {
   initialPitch?: number;
   initialYaw?: number;
   xrConfig?: Partial<XRConfig>;
+  vrConfig?: VRConfig; // VR-specific config for hotspot overrides
   onExit: () => void;
   onSceneChange?: (sceneId: string) => void;
 }

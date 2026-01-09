@@ -9,7 +9,7 @@
 import { useState } from 'react';
 import { Glasses } from 'lucide-react';
 import { useXRSupport } from '@/hooks/useXRSupport';
-import { TourConfig } from '@/types/tour';
+import { TourConfig, DEFAULT_VR_CONFIG } from '@/types/tour';
 import dynamic from 'next/dynamic';
 
 // Dynamically import XRPanoramaViewer to avoid SSR issues with Three.js
@@ -42,6 +42,9 @@ export default function XRButton({
   const { isSupported, isChecking } = useXRSupport();
   const [showXRViewer, setShowXRViewer] = useState(false);
   const [currentScene, setCurrentScene] = useState(currentSceneId);
+
+  // Get VR config from main config (embedded)
+  const vrConfig = config.vrConfig || DEFAULT_VR_CONFIG;
 
   // Don't render while checking or if not supported
   if (isChecking) {
@@ -107,6 +110,7 @@ export default function XRButton({
           initialSceneId={currentScene}
           initialPitch={currentPitch}
           initialYaw={currentYaw}
+          vrConfig={vrConfig}
           onExit={handleExitVR}
           onSceneChange={handleSceneChange}
         />

@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import fs from 'fs';
 import path from 'path';
-import { list } from '@vercel/blob';
+import { list, put } from '@vercel/blob';
+import { TourConfig } from '@/types/tour';
 
 export async function GET(
   request: NextRequest,
@@ -83,3 +84,76 @@ export async function GET(
   }
 }
 
+/**
+ * POST - Save config with password protection
+ * Requires EDIT_SECRET env variable to be set
+ * Header: x-edit-secret must match EDIT_SECRET
+ */
+export async function POST(
+  request: NextRequest,
+  { params }: { params: Promise<{ projectCode: string }> }
+) {
+  const resolvedParams = await params;
+  const { projectCode } = resolvedParams;
+
+  try {
+    // Check if editing is enabled
+    const editSecret = process.env.EDIT_SECRET;
+    if (!editSecret) {
+      return NextResponse.json(
+        { error: 'Editing is disabled. Set EDIT_SECRET env variable to enable.' },
+        { status: 403 }
+      );
+    }
+
+    // Verify password
+    const providedSecret = request.headers.get('x-edit-secret');
+    if (providedSecret !== editSecret) {
+      return NextResponse.json(
+        { error: 'Invalid edit secret' },
+        { status: 401 }
+      );
+    }
+
+    const config: TourConfig = await request.json();
+    console.log(`[CONFIG] Saving config for project: ${projectCode}`);
+
+    // Validate config structure
+    if (!config || !config.id || !config.scenes) {
+      return NextResponse.json({ error: 'Invalid config structure' }, { status: 400 });
+    }
+
+    // Ensure project ID matches
+    config.id = projectCode;
+
+    // 1. Try to save locally first
+    const projectDir = path.join(process.cwd(), 'public', 'projects', projectCode);
+    const configPath = path.join(projectDir, 'config.json');
+
+    if (fs.existsSync(projectDir)) {
+      console.log(`[CONFIG] Saving locally to: ${configPath}`);
+      fs.writeFileSync(configPath, JSON.stringify(config, null, 2));
+      return NextResponse.json({ success: true, source: 'local' });
+    }
+
+    // 2. If project folder doesn't exist locally, save to Blob
+    if (process.env.BLOB_READ_WRITE_TOKEN) {
+      console.log(`[CONFIG] Saving to Blob storage`);
+      const blob = await put(
+        `projects/${projectCode}/config.json`,
+        JSON.stringify(config, null, 2),
+        {
+          access: 'public',
+          contentType: 'application/json',
+        }
+      );
+      return NextResponse.json({ success: true, source: 'blob', url: blob.url });
+    }
+
+    return NextResponse.json({ error: 'No storage available' }, { status: 500 });
+
+  } catch (error) {
+    console.error(`[CONFIG] Error saving config:`, error);
+    return NextResponse.json({ error: 'Failed to save config' }, { status: 500 });
+  }
+}

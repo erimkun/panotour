@@ -2,8 +2,9 @@
 
 import { useState, useEffect, useRef } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { TourConfig, Scene, Hotspot } from '@/types/tour';
-import { Plus, Trash, Map as MapIcon, Info, Download, Eye, Crosshair, Settings, ChevronDown, ChevronUp, Upload, Music, ArrowLeft } from 'lucide-react';
+import { TourConfig, Scene, Hotspot, VRConfig, DEFAULT_VR_CONFIG } from '@/types/tour';
+import { Plus, Trash, Map as MapIcon, Info, Download, Eye, Crosshair, Settings, ChevronDown, ChevronUp, Upload, Music, ArrowLeft, Save, X, Lock, CheckCircle, AlertCircle, Loader2 } from 'lucide-react';
+import VRSettingsPanel from './VRSettingsPanel';
 import * as LucideIcons from 'lucide-react';
 import JSZip from 'jszip';
 import { saveAs } from 'file-saver';
@@ -71,6 +72,12 @@ export default function TourEditor({ initialConfig, projectCode }: TourEditorPro
   const isLocalMode = localFiles.size > 0; // Has local files = local mode
   const [viewSavedMessage, setViewSavedMessage] = useState(false);
   
+  // Server save state
+  const [showSaveModal, setShowSaveModal] = useState(false);
+  const [editSecret, setEditSecret] = useState('');
+  const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'success' | 'error'>('idle');
+  const [saveMessage, setSaveMessage] = useState('');
+  
   // Audio state
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const [isPlayingAudio, setIsPlayingAudio] = useState(false);
@@ -80,8 +87,14 @@ export default function TourEditor({ initialConfig, projectCode }: TourEditorPro
   const [targetViewHotspotId, setTargetViewHotspotId] = useState<string | null>(null);
   const [returnSceneId, setReturnSceneId] = useState<string | null>(null);
   
+  // Selected hotspot for VR panel
+  const [selectedHotspotId, setSelectedHotspotId] = useState<string | null>(null);
+  
   const isPickingRef = useRef(false);
   const lastSceneIdRef = useRef<string>('');
+
+  // Get VR config from main config (or default)
+  const vrConfig = config.vrConfig || DEFAULT_VR_CONFIG;
 
   // Sync ref
   useEffect(() => { isPickingRef.current = isPicking; }, [isPicking]);
@@ -95,6 +108,55 @@ export default function TourEditor({ initialConfig, projectCode }: TourEditorPro
           })
           .catch(err => console.error("Failed to load images", err));
   }, [projectCode]);
+
+  // Update VR config within main config (no separate API call - saved with export)
+  const handleVRConfigChange = (newVRConfig: VRConfig) => {
+      setConfig(prev => ({
+          ...prev,
+          vrConfig: newVRConfig,
+      }));
+  };
+
+  // Save config to server with password
+  const handleSaveToServer = async () => {
+      if (!editSecret.trim()) {
+          setSaveMessage('Şifre gerekli');
+          setSaveStatus('error');
+          return;
+      }
+
+      setSaveStatus('saving');
+      setSaveMessage('');
+
+      try {
+          const response = await fetch(`/api/projects/${projectCode}/config`, {
+              method: 'POST',
+              headers: {
+                  'Content-Type': 'application/json',
+                  'x-edit-secret': editSecret,
+              },
+              body: JSON.stringify(config),
+          });
+
+          const data = await response.json();
+
+          if (response.ok) {
+              setSaveStatus('success');
+              setSaveMessage('Config başarıyla kaydedildi!');
+              setTimeout(() => {
+                  setShowSaveModal(false);
+                  setSaveStatus('idle');
+                  setSaveMessage('');
+              }, 2000);
+          } else {
+              setSaveStatus('error');
+              setSaveMessage(data.error || 'Kaydetme başarısız');
+          }
+      } catch (err) {
+          setSaveStatus('error');
+          setSaveMessage('Bağlantı hatası');
+      }
+  };
 
   // Load Pannellum
   useEffect(() => {
@@ -1463,14 +1525,100 @@ export default function TourEditor({ initialConfig, projectCode }: TourEditorPro
                 >
                     <Download size={20} /> Download Config
                 </button>
+                <button 
+                    onClick={() => setShowSaveModal(true)}
+                    className="w-full py-3 bg-purple-600 hover:bg-purple-500 text-white rounded-lg font-bold flex items-center justify-center gap-2 shadow-lg shadow-purple-900/20"
+                >
+                    <Save size={20} /> Sunucuya Kaydet
+                </button>
                 <p className="text-xs text-gray-500 mt-2 text-center">
-                    Sadece config.json indirilir<br/>
-                    public/projects/{projectCode}/config.json dosyasını değiştir
+                    Download: config.json indir<br/>
+                    Sunucuya Kaydet: Şifre ile direkt kaydet
                 </p>
               </>
             )}
         </div>
       </div>
+      )}
+
+      {/* Save to Server Modal */}
+      {showSaveModal && (
+        <div className="fixed inset-0 z-[9999] bg-black/80 flex items-center justify-center p-4">
+          <div className="bg-gray-900 rounded-xl border border-gray-700 shadow-2xl w-full max-w-md overflow-hidden">
+            <div className="bg-purple-600 px-4 py-3 flex items-center justify-between">
+              <div className="flex items-center gap-2 text-white">
+                <Lock size={20} />
+                <span className="font-semibold">Sunucuya Kaydet</span>
+              </div>
+              <button
+                onClick={() => {
+                  setShowSaveModal(false);
+                  setSaveStatus('idle');
+                  setSaveMessage('');
+                }}
+                className="text-white/80 hover:text-white p-1 rounded hover:bg-white/10"
+              >
+                <X size={20} />
+              </button>
+            </div>
+            
+            <div className="p-6 space-y-4">
+              <p className="text-sm text-gray-400">
+                Config'i sunucuya kaydetmek için düzenleme şifresini girin.
+              </p>
+              
+              <div>
+                <label className="block text-sm text-gray-300 mb-2">Düzenleme Şifresi</label>
+                <input
+                  type="password"
+                  value={editSecret}
+                  onChange={(e) => setEditSecret(e.target.value)}
+                  placeholder="EDIT_SECRET"
+                  className="w-full bg-gray-800 border border-gray-600 rounded-lg px-4 py-3 text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-purple-500"
+                  onKeyDown={(e) => e.key === 'Enter' && handleSaveToServer()}
+                />
+              </div>
+
+              {saveMessage && (
+                <div className={`flex items-center gap-2 p-3 rounded-lg ${
+                  saveStatus === 'success' ? 'bg-green-900/30 text-green-400' :
+                  saveStatus === 'error' ? 'bg-red-900/30 text-red-400' :
+                  'bg-gray-800 text-gray-400'
+                }`}>
+                  {saveStatus === 'success' && <CheckCircle size={18} />}
+                  {saveStatus === 'error' && <AlertCircle size={18} />}
+                  {saveMessage}
+                </div>
+              )}
+
+              <button
+                onClick={handleSaveToServer}
+                disabled={saveStatus === 'saving'}
+                className={`w-full py-3 rounded-lg font-bold flex items-center justify-center gap-2 transition-colors ${
+                  saveStatus === 'saving' 
+                    ? 'bg-gray-600 cursor-wait' 
+                    : 'bg-purple-600 hover:bg-purple-500'
+                } text-white`}
+              >
+                {saveStatus === 'saving' ? (
+                  <>
+                    <Loader2 size={20} className="animate-spin" />
+                    Kaydediliyor...
+                  </>
+                ) : (
+                  <>
+                    <Save size={20} />
+                    Kaydet
+                  </>
+                )}
+              </button>
+
+              <p className="text-xs text-gray-500 text-center">
+                💡 Şifre .env dosyasındaki EDIT_SECRET değişkenidir
+              </p>
+            </div>
+          </div>
+        </div>
       )}
 
       {/* Viewer Area */}
@@ -1480,6 +1628,18 @@ export default function TourEditor({ initialConfig, projectCode }: TourEditorPro
             <div className="absolute inset-0 flex items-center justify-center text-gray-500">
                 Select a scene to start editing
             </div>
+        )}
+        
+        {/* VR Settings Panel */}
+        {activeSceneId && (
+          <VRSettingsPanel
+            config={config}
+            vrConfig={vrConfig}
+            activeSceneId={activeSceneId}
+            selectedHotspotId={selectedHotspotId}
+            projectCode={projectCode}
+            onVRConfigChange={handleVRConfigChange}
+          />
         )}
       </div>
     </div>

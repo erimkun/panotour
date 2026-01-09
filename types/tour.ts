@@ -55,4 +55,32 @@ export interface TourConfig {
     coneBorderColor?: string;
     coneSize?: number;
   };
+  // VR config embedded in main config (exported with ZIP)
+  vrConfig?: VRConfig;
 }
+
+// VR-specific hotspot override (only changed values)
+export interface VRHotspotOverride {
+  pitch?: number;    // VR-specific pitch (fallback to Pannellum value)
+  yaw?: number;      // VR-specific yaw (fallback to Pannellum value)
+  visible?: boolean; // Whether visible in VR (default: true for scene hotspots)
+}
+
+// VR Configuration - separate from Pannellum config
+export interface VRConfig {
+  // Which scenes are visible in VR mode
+  visibleScenes: string[];  // scene IDs - empty means all visible
+  
+  // Hotspot overrides per scene (only store changed values)
+  hotspotOverrides: {
+    [sceneId: string]: {
+      [hotspotId: string]: VRHotspotOverride;
+    };
+  };
+}
+
+// Default VR config
+export const DEFAULT_VR_CONFIG: VRConfig = {
+  visibleScenes: [],
+  hotspotOverrides: {},
+};

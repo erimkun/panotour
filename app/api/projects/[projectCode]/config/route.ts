@@ -145,6 +145,7 @@ export async function POST(
         {
           access: 'public',
           contentType: 'application/json',
+          allowOverwrite: true, // Allow updating existing config
         }
       );
       return NextResponse.json({ success: true, source: 'blob', url: blob.url });

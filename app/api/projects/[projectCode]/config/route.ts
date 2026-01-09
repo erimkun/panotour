@@ -3,6 +3,7 @@ import fs from 'fs';
 import path from 'path';
 import { list, put } from '@vercel/blob';
 import { TourConfig } from '@/types/tour';
+import { checkRateLimit, recordFailedAttempt, resetRateLimit, getClientIP } from '@/utils/rateLimiter';
 
 export async function GET(
   request: NextRequest,
@@ -96,7 +97,25 @@ export async function POST(
   const resolvedParams = await params;
   const { projectCode } = resolvedParams;
 
+  // Get client IP for rate limiting
+  const clientIP = getClientIP(request);
+  console.log(`[CONFIG] POST request from IP: ${clientIP}`);
+
   try {
+    // Check rate limit first
+    const rateLimitCheck = await checkRateLimit(clientIP);
+    if (!rateLimitCheck.allowed) {
+      console.log(`[CONFIG] IP ${clientIP} is banned until ${rateLimitCheck.bannedUntil}`);
+      return NextResponse.json(
+        { 
+          error: rateLimitCheck.message,
+          bannedUntil: rateLimitCheck.bannedUntil?.toISOString(),
+          remainingAttempts: 0
+        },
+        { status: 429 }
+      );
+    }
+
     // Check if editing is enabled
     const editSecret = process.env.EDIT_SECRET;
     if (!editSecret) {
@@ -109,11 +128,24 @@ export async function POST(
     // Verify password
     const providedSecret = request.headers.get('x-edit-secret');
     if (providedSecret !== editSecret) {
+      // Record failed attempt
+      const failResult = await recordFailedAttempt(clientIP);
+      console.log(`[CONFIG] Failed attempt for IP ${clientIP}. Remaining: ${failResult.remainingAttempts}`);
+      
       return NextResponse.json(
-        { error: 'Invalid edit secret' },
-        { status: 401 }
+        { 
+          error: failResult.message,
+          remainingAttempts: failResult.remainingAttempts,
+          banned: failResult.banned,
+          bannedUntil: failResult.bannedUntil?.toISOString()
+        },
+        { status: failResult.banned ? 429 : 401 }
       );
     }
+
+    // Password correct - reset rate limit
+    await resetRateLimit(clientIP);
+    console.log(`[CONFIG] Successful auth for IP ${clientIP}, rate limit reset`);
 
     const config: TourConfig = await request.json();
     console.log(`[CONFIG] Saving config for project: ${projectCode}`);

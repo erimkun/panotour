@@ -117,7 +117,7 @@ export default function TourEditor({ initialConfig, projectCode }: TourEditorPro
       }));
   };
 
-  // Save config to server with password
+  // Save config to server with password (and optionally upload files in local mode)
   const handleSaveToServer = async () => {
       if (!editSecret.trim()) {
           setSaveMessage('Şifre gerekli');
@@ -129,6 +129,74 @@ export default function TourEditor({ initialConfig, projectCode }: TourEditorPro
       setSaveMessage('');
 
       try {
+          // If local mode, first upload all files
+          if (isLocalMode && localFiles.size > 0) {
+              setSaveMessage('Dosyalar yükleniyor...');
+              
+              // Separate files into images and audio
+              const imageFiles: File[] = [];
+              const audioFiles: File[] = [];
+              
+              for (const [filename, file] of localFiles.entries()) {
+                  if (file.type.startsWith('audio/') || filename.match(/\.(mp3|wav|ogg)$/i)) {
+                      audioFiles.push(file);
+                  } else {
+                      imageFiles.push(file);
+                  }
+              }
+
+              // Upload images
+              if (imageFiles.length > 0) {
+                  setSaveMessage(`${imageFiles.length} resim yükleniyor...`);
+                  const imageFormData = new FormData();
+                  imageFormData.append('folder', 'images');
+                  for (const file of imageFiles) {
+                      imageFormData.append('files', file);
+                  }
+
+                  const imageResponse = await fetch(`/api/projects/${projectCode}/upload-files`, {
+                      method: 'POST',
+                      headers: { 'x-edit-secret': editSecret },
+                      body: imageFormData,
+                  });
+
+                  if (!imageResponse.ok) {
+                      const err = await imageResponse.json();
+                      throw new Error(err.error || 'Resim yükleme hatası');
+                  }
+                  
+                  const imageResult = await imageResponse.json();
+                  console.log('[SAVE] Images uploaded:', imageResult);
+              }
+
+              // Upload audio
+              if (audioFiles.length > 0) {
+                  setSaveMessage(`${audioFiles.length} ses dosyası yükleniyor...`);
+                  const audioFormData = new FormData();
+                  audioFormData.append('folder', 'audio');
+                  for (const file of audioFiles) {
+                      audioFormData.append('files', file);
+                  }
+
+                  const audioResponse = await fetch(`/api/projects/${projectCode}/upload-files`, {
+                      method: 'POST',
+                      headers: { 'x-edit-secret': editSecret },
+                      body: audioFormData,
+                  });
+
+                  if (!audioResponse.ok) {
+                      const err = await audioResponse.json();
+                      throw new Error(err.error || 'Ses yükleme hatası');
+                  }
+                  
+                  const audioResult = await audioResponse.json();
+                  console.log('[SAVE] Audio uploaded:', audioResult);
+              }
+
+              setSaveMessage('Config kaydediliyor...');
+          }
+
+          // Now save the config
           const response = await fetch(`/api/projects/${projectCode}/config`, {
               method: 'POST',
               headers: {
@@ -142,19 +210,37 @@ export default function TourEditor({ initialConfig, projectCode }: TourEditorPro
 
           if (response.ok) {
               setSaveStatus('success');
-              setSaveMessage('Config başarıyla kaydedildi!');
+              if (isLocalMode) {
+                  setSaveMessage(`✓ ${localFiles.size} dosya + config başarıyla kaydedildi!`);
+                  // Clear local files after successful upload
+                  setLocalFiles(new Map());
+                  // Clean up preview URLs
+                  previewUrls.forEach(url => URL.revokeObjectURL(url));
+                  setPreviewUrls(new Map());
+              } else {
+                  setSaveMessage('Config başarıyla kaydedildi!');
+              }
               setTimeout(() => {
                   setShowSaveModal(false);
                   setSaveStatus('idle');
                   setSaveMessage('');
-              }, 2000);
+              }, 2500);
           } else {
               setSaveStatus('error');
-              setSaveMessage(data.error || 'Kaydetme başarısız');
+              // Show detailed error with remaining attempts or ban info
+              let errorMsg = data.error || 'Kaydetme başarısız';
+              if (data.remainingAttempts !== undefined && data.remainingAttempts > 0) {
+                  errorMsg += ` (Kalan hak: ${data.remainingAttempts})`;
+              }
+              if (data.bannedUntil) {
+                  const banDate = new Date(data.bannedUntil);
+                  errorMsg = `⛔ IP adresiniz engellenmiş. Kaldırılma: ${banDate.toLocaleString('tr-TR')}`;
+              }
+              setSaveMessage(errorMsg);
           }
       } catch (err) {
           setSaveStatus('error');
-          setSaveMessage('Bağlantı hatası');
+          setSaveMessage(err instanceof Error ? err.message : 'Bağlantı hatası');
       }
   };
 
@@ -1512,9 +1598,15 @@ export default function TourEditor({ initialConfig, projectCode }: TourEditorPro
                 >
                     <Download size={20} /> Export Project ZIP
                 </button>
+                <button 
+                    onClick={() => setShowSaveModal(true)}
+                    className="w-full py-3 bg-purple-600 hover:bg-purple-500 text-white rounded-lg font-bold flex items-center justify-center gap-2 shadow-lg shadow-purple-900/20"
+                >
+                    <Upload size={20} /> Sunucuya Kaydet
+                </button>
                 <p className="text-xs text-gray-500 text-center">
-                    Config + resimler + sesler birlikte indirilir<br/>
-                    ZIP'i aç ve public/projects/ altına at
+                    ZIP: Config + dosyalar indir<br/>
+                    Sunucuya: Dosyaları + config'i Blob'a yükle
                 </p>
               </>
             ) : (
@@ -1564,7 +1656,14 @@ export default function TourEditor({ initialConfig, projectCode }: TourEditorPro
             
             <div className="p-6 space-y-4">
               <p className="text-sm text-gray-400">
-                Config'i sunucuya kaydetmek için düzenleme şifresini girin.
+                {isLocalMode ? (
+                  <>
+                    <span className="text-purple-400 font-medium">{localFiles.size} dosya</span> + config sunucuya yüklenecek.<br/>
+                    Düzenleme şifresini girin.
+                  </>
+                ) : (
+                  'Config\'i sunucuya kaydetmek için düzenleme şifresini girin.'
+                )}
               </p>
               
               <div>
@@ -1579,15 +1678,17 @@ export default function TourEditor({ initialConfig, projectCode }: TourEditorPro
                 />
               </div>
 
-              {saveMessage && (
+              {(saveMessage || saveStatus === 'saving') && (
                 <div className={`flex items-center gap-2 p-3 rounded-lg ${
                   saveStatus === 'success' ? 'bg-green-900/30 text-green-400' :
                   saveStatus === 'error' ? 'bg-red-900/30 text-red-400' :
+                  saveStatus === 'saving' ? 'bg-purple-900/30 text-purple-400' :
                   'bg-gray-800 text-gray-400'
                 }`}>
                   {saveStatus === 'success' && <CheckCircle size={18} />}
                   {saveStatus === 'error' && <AlertCircle size={18} />}
-                  {saveMessage}
+                  {saveStatus === 'saving' && <Loader2 size={18} className="animate-spin" />}
+                  {saveMessage || 'Hazırlanıyor...'}
                 </div>
               )}
 

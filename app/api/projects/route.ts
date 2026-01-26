@@ -85,9 +85,31 @@ export async function GET() {
             const config = await response.json();
             
             const firstSceneImage = config.scenes?.[0]?.image;
-            const thumbnail = firstSceneImage 
-              ? blobs.find(b => b.pathname.endsWith(`images/${firstSceneImage}`))?.url || ''
-              : '';
+            let thumbnail = '';
+            
+            // 1. Önce config'deki resmi bulmaya çalış
+            if (firstSceneImage) {
+              const imageBlob = blobs.find(b => 
+                b.pathname.endsWith(`images/${firstSceneImage}`) ||
+                b.pathname.includes(`/images/${firstSceneImage}`) ||
+                b.pathname.endsWith(firstSceneImage)
+              );
+              thumbnail = imageBlob?.url || '';
+            }
+            
+            // 2. Bulunamazsa projedeki herhangi bir resmi kullan
+            if (!thumbnail) {
+              const anyImageBlob = blobs.find(b => {
+                const lowerPath = b.pathname.toLowerCase();
+                return (
+                  lowerPath.endsWith('.jpg') ||
+                  lowerPath.endsWith('.jpeg') ||
+                  lowerPath.endsWith('.png') ||
+                  lowerPath.endsWith('.webp')
+                ) && !lowerPath.includes('icon') && !lowerPath.includes('logo');
+              });
+              thumbnail = anyImageBlob?.url || '';
+            }
             
             projects.push({
               id: projectCode,

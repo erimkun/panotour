@@ -164,8 +164,23 @@ export default function XRPanoramaViewer({
     }
 
     return () => {
+      // End any active XR session first
+      if (manager.getRenderer().xr.isPresenting) {
+        try {
+          const session = manager.getRenderer().xr.getSession();
+          if (session) {
+            session.end().catch(() => {});
+          }
+        } catch {
+          // Ignore errors during cleanup
+        }
+      }
+      
+      // Then dispose the manager
       manager.dispose();
       sceneManagerRef.current = null;
+      initializedRef.current = false;
+      
       if (audioRef.current) {
         audioRef.current.pause();
         audioRef.current = null;
@@ -195,11 +210,16 @@ export default function XRPanoramaViewer({
   }, [isVRActive, startSession, endSession]);
 
   // Handle exit
-  const handleExit = useCallback(() => {
-    endSession();
+  const handleExit = useCallback(async () => {
+    // End XR session first if active
+    if (isVRActive) {
+      await endSession();
+      // Wait a bit for session to fully end before cleanup
+      await new Promise(resolve => setTimeout(resolve, 100));
+    }
     stopAudio();
     onExit();
-  }, [endSession, stopAudio, onExit]);
+  }, [endSession, stopAudio, onExit, isVRActive]);
 
   // Manual scene change (from thumbnail clicks)
   const handleManualSceneChange = useCallback((sceneId: string) => {

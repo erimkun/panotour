@@ -33,6 +33,9 @@ export class XRSceneManager {
   private animationFrameId: number | null = null;
   private onSceneChange: ((sceneId: string) => void) | null = null;
   private isTransitioning: boolean = false;
+  private isDisposed: boolean = false;
+  private contextLostHandler: ((event: Event) => void) | null = null;
+  private contextRestoredHandler: ((event: Event) => void) | null = null;
 
   constructor(container: HTMLElement, config: Partial<XRConfig> = {}) {
     this.config = { ...DEFAULT_XR_CONFIG, ...config };
@@ -55,6 +58,23 @@ export class XRSceneManager {
 
     // Handle resize
     window.addEventListener('resize', this.handleResize);
+
+    // Handle WebGL context lost/restored
+    this.contextLostHandler = (event: Event) => {
+      event.preventDefault();
+      console.warn('WebGL context lost - stopping animation');
+      this.stopAnimation();
+    };
+
+    this.contextRestoredHandler = () => {
+      console.log('WebGL context restored - restarting animation');
+      if (!this.isDisposed) {
+        this.startAnimation();
+      }
+    };
+
+    this.renderer.domElement.addEventListener('webglcontextlost', this.contextLostHandler, false);
+    this.renderer.domElement.addEventListener('webglcontextrestored', this.contextRestoredHandler, false);
   }
 
   private createCamera(): THREE.PerspectiveCamera {
@@ -473,6 +493,12 @@ export class XRSceneManager {
    * Render the scene
    */
   render(): void {
+    // Don't render if disposed or context lost
+    if (this.isDisposed) return;
+    
+    const gl = this.renderer.getContext();
+    if (gl.isContextLost()) return;
+
     // Update gaze controller
     const gazeState = this.gazeController.update(this.camera);
     this.updateHotspotGaze(gazeState.targetHotspotId, gazeState.progress);
@@ -485,8 +511,12 @@ export class XRSceneManager {
    * Start animation loop
    */
   startAnimation(): void {
+    if (this.isDisposed) return;
+    
     this.renderer.setAnimationLoop(() => {
-      this.render();
+      if (!this.isDisposed) {
+        this.render();
+      }
     });
   }
 
@@ -494,7 +524,13 @@ export class XRSceneManager {
    * Stop animation loop
    */
   stopAnimation(): void {
-    this.renderer.setAnimationLoop(null);
+    try {
+      if (this.renderer && !this.isDisposed) {
+        this.renderer.setAnimationLoop(null);
+      }
+    } catch (error) {
+      console.warn('Error stopping animation loop:', error);
+    }
   }
 
   private handleResize = (): void => {
@@ -510,24 +546,52 @@ export class XRSceneManager {
    * Dispose of all resources
    */
   dispose(): void {
+    if (this.isDisposed) return;
+    this.isDisposed = true;
+
     window.removeEventListener('resize', this.handleResize);
+
+    // Remove context lost/restored handlers
+    if (this.contextLostHandler) {
+      this.renderer.domElement.removeEventListener('webglcontextlost', this.contextLostHandler);
+    }
+    if (this.contextRestoredHandler) {
+      this.renderer.domElement.removeEventListener('webglcontextrestored', this.contextRestoredHandler);
+    }
+
+    // End XR session if active
+    if (this.renderer.xr.isPresenting) {
+      try {
+        const session = this.renderer.xr.getSession();
+        if (session) {
+          session.end().catch(console.warn);
+        }
+      } catch (error) {
+        console.warn('Error ending XR session during dispose:', error);
+      }
+    }
+
     this.stopAnimation();
     this.clearHotspots();
 
     // Dispose Three.js resources
-    this.sphere.geometry.dispose();
-    (this.sphere.material as THREE.Material).dispose();
-    
-    if (this.gazePointer) {
-      this.gazePointer.material.dispose();
-    }
+    try {
+      this.sphere.geometry.dispose();
+      (this.sphere.material as THREE.Material).dispose();
+      
+      if (this.gazePointer) {
+        this.gazePointer.material.dispose();
+      }
 
-    this.renderer.dispose();
-    this.gazeController.dispose();
+      this.renderer.dispose();
+      this.gazeController.dispose();
 
-    // Remove canvas from DOM
-    if (this.renderer.domElement.parentElement) {
-      this.renderer.domElement.parentElement.removeChild(this.renderer.domElement);
+      // Remove canvas from DOM
+      if (this.renderer.domElement.parentElement) {
+        this.renderer.domElement.parentElement.removeChild(this.renderer.domElement);
+      }
+    } catch (error) {
+      console.warn('Error disposing Three.js resources:', error);
     }
   }
 }

@@ -39,10 +39,21 @@ export function useXRSession(options: UseXRSessionOptions): UseXRSessionReturn {
   });
   
   const sessionRef = useRef<XRSession | null>(null);
+  const isEndingRef = useRef<boolean>(false);
+  const isMountedRef = useRef<boolean>(true);
 
   // Start XR session
   const startSession = useCallback(async () => {
-    if (!renderer || state.isActive || state.isStarting) {
+    if (!renderer || state.isActive || state.isStarting || isEndingRef.current) {
+      return;
+    }
+
+    // Check if WebGL context is available
+    const gl = renderer.getContext();
+    if (gl.isContextLost()) {
+      const error = new Error('WebGL context lost - cannot start VR session');
+      setState(prev => ({ ...prev, error: error.message }));
+      onError?.(error);
       return;
     }
 
@@ -52,9 +63,26 @@ export function useXRSession(options: UseXRSessionOptions): UseXRSessionReturn {
       return;
     }
 
+    // Check if there's already an active session that needs to be ended
+    if (sessionRef.current) {
+      console.warn('Ending existing session before starting new one');
+      try {
+        await sessionRef.current.end();
+      } catch (e) {
+        console.warn('Error ending existing session:', e);
+      }
+      sessionRef.current = null;
+    }
+
     setState(prev => ({ ...prev, isStarting: true, error: null }));
 
     try {
+      // Check VR support first
+      const isVRSupported = await navigator.xr.isSessionSupported('immersive-vr');
+      if (!isVRSupported) {
+        throw new Error('VR session not supported on this device');
+      }
+
       // Request VR session
       const session = await navigator.xr.requestSession('immersive-vr', {
         optionalFeatures: ['local-floor', 'bounded-floor'],
@@ -67,32 +95,57 @@ export function useXRSession(options: UseXRSessionOptions): UseXRSessionReturn {
       await renderer.xr.setSession(session);
 
       // Handle session end
-      session.addEventListener('end', () => {
+      const handleSessionEnd = () => {
+        session.removeEventListener('end', handleSessionEnd);
         sessionRef.current = null;
-        setState({ isActive: false, isStarting: false, error: null });
+        isEndingRef.current = false;
+        if (isMountedRef.current) {
+          setState({ isActive: false, isStarting: false, error: null });
+        }
         onSessionEnd?.();
-      });
+      };
 
-      setState({ isActive: true, isStarting: false, error: null });
+      session.addEventListener('end', handleSessionEnd);
+
+      if (isMountedRef.current) {
+        setState({ isActive: true, isStarting: false, error: null });
+      }
       onSessionStart?.();
     } catch (error) {
+      sessionRef.current = null;
       const errorMessage = error instanceof Error ? error.message : 'Failed to start XR session';
-      setState({ isActive: false, isStarting: false, error: errorMessage });
+      if (isMountedRef.current) {
+        setState({ isActive: false, isStarting: false, error: errorMessage });
+      }
       onError?.(error instanceof Error ? error : new Error(errorMessage));
     }
   }, [renderer, state.isActive, state.isStarting, onSessionStart, onSessionEnd, onError]);
 
   // End XR session
   const endSession = useCallback(async () => {
+    if (isEndingRef.current) return;
+    
     if (sessionRef.current) {
+      isEndingRef.current = true;
       try {
-        await sessionRef.current.end();
+        // Check if session is still valid before ending
+        if (sessionRef.current.end) {
+          await sessionRef.current.end();
+        }
       } catch (error) {
-        console.error('Error ending XR session:', error);
+        // Ignore InvalidStateError - session may already be ended
+        if (error instanceof DOMException && error.name === 'InvalidStateError') {
+          console.log('XR session already ended');
+        } else {
+          console.error('Error ending XR session:', error);
+        }
       }
       sessionRef.current = null;
+      isEndingRef.current = false;
     }
-    setState({ isActive: false, isStarting: false, error: null });
+    if (isMountedRef.current) {
+      setState({ isActive: false, isStarting: false, error: null });
+    }
   }, []);
 
   // Get session (for accessing in event handlers)
@@ -102,9 +155,19 @@ export function useXRSession(options: UseXRSessionOptions): UseXRSessionReturn {
 
   // Cleanup on unmount
   useEffect(() => {
+    isMountedRef.current = true;
+    
     return () => {
+      isMountedRef.current = false;
       if (sessionRef.current) {
-        sessionRef.current.end().catch(console.error);
+        try {
+          sessionRef.current.end().catch(() => {
+            // Ignore errors during cleanup
+          });
+        } catch {
+          // Ignore errors during cleanup
+        }
+        sessionRef.current = null;
       }
     };
   }, []);

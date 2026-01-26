@@ -1,9 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import fs from 'fs';
 import path from 'path';
-import { list, put } from '@vercel/blob';
-import { TourConfig } from '@/types/tour';
-import { checkRateLimit, recordFailedAttempt, resetRateLimit, getClientIP } from '@/utils/rateLimiter';
+import { list } from '@vercel/blob';
 
 export async function GET(
   request: NextRequest,
@@ -85,108 +83,50 @@ export async function GET(
   }
 }
 
-/**
- * POST - Save config with password protection
- * Requires EDIT_SECRET env variable to be set
- * Header: x-edit-secret must match EDIT_SECRET
- */
-export async function POST(
+export async function PUT(
   request: NextRequest,
   { params }: { params: Promise<{ projectCode: string }> }
 ) {
   const resolvedParams = await params;
   const { projectCode } = resolvedParams;
-
-  // Get client IP for rate limiting
-  const clientIP = getClientIP(request);
-  console.log(`[CONFIG] POST request from IP: ${clientIP}`);
-
+  
   try {
-    // Check rate limit first
-    const rateLimitCheck = await checkRateLimit(clientIP);
-    if (!rateLimitCheck.allowed) {
-      console.log(`[CONFIG] IP ${clientIP} is banned until ${rateLimitCheck.bannedUntil}`);
-      return NextResponse.json(
-        { 
-          error: rateLimitCheck.message,
-          bannedUntil: rateLimitCheck.bannedUntil?.toISOString(),
-          remainingAttempts: 0
-        },
-        { status: 429 }
-      );
-    }
+    const config = await request.json();
+    console.log(`[CONFIG PUT] Saving config for project: ${projectCode}`);
 
-    // Check if editing is enabled
-    const editSecret = process.env.EDIT_SECRET;
-    if (!editSecret) {
-      return NextResponse.json(
-        { error: 'Editing is disabled. Set EDIT_SECRET env variable to enable.' },
-        { status: 403 }
-      );
-    }
-
-    // Verify password
-    const providedSecret = request.headers.get('x-edit-secret');
-    if (providedSecret !== editSecret) {
-      // Record failed attempt
-      const failResult = await recordFailedAttempt(clientIP);
-      console.log(`[CONFIG] Failed attempt for IP ${clientIP}. Remaining: ${failResult.remainingAttempts}`);
-      
-      return NextResponse.json(
-        { 
-          error: failResult.message,
-          remainingAttempts: failResult.remainingAttempts,
-          banned: failResult.banned,
-          bannedUntil: failResult.bannedUntil?.toISOString()
-        },
-        { status: failResult.banned ? 429 : 401 }
-      );
-    }
-
-    // Password correct - reset rate limit
-    await resetRateLimit(clientIP);
-    console.log(`[CONFIG] Successful auth for IP ${clientIP}, rate limit reset`);
-
-    const config: TourConfig = await request.json();
-    console.log(`[CONFIG] Saving config for project: ${projectCode}`);
-
-    // Validate config structure
-    if (!config || !config.id || !config.scenes) {
-      return NextResponse.json({ error: 'Invalid config structure' }, { status: 400 });
-    }
-
-    // Ensure project ID matches
-    config.id = projectCode;
-
-    // 1. Try to save locally first
-    const projectDir = path.join(process.cwd(), 'public', 'projects', projectCode);
-    const configPath = path.join(projectDir, 'config.json');
-
-    if (fs.existsSync(projectDir)) {
-      console.log(`[CONFIG] Saving locally to: ${configPath}`);
-      fs.writeFileSync(configPath, JSON.stringify(config, null, 2));
-      return NextResponse.json({ success: true, source: 'local' });
-    }
-
-    // 2. If project folder doesn't exist locally, save to Blob
+    // Check if Vercel Blob is available
     if (process.env.BLOB_READ_WRITE_TOKEN) {
-      console.log(`[CONFIG] Saving to Blob storage`);
-      const blob = await put(
-        `projects/${projectCode}/config.json`,
-        JSON.stringify(config, null, 2),
-        {
-          access: 'public',
-          contentType: 'application/json',
-          allowOverwrite: true, // Allow updating existing config
-        }
-      );
-      return NextResponse.json({ success: true, source: 'blob', url: blob.url });
+      const { put } = await import('@vercel/blob');
+      
+      // Remove 'source' field before saving
+      const { source, ...configToSave } = config;
+      
+      const blob = await put(`projects/${projectCode}/config.json`, JSON.stringify(configToSave, null, 2), {
+        access: 'public',
+        addRandomSuffix: false,
+      });
+      
+      console.log(`[CONFIG PUT] Config saved to blob: ${blob.url}`);
+      return NextResponse.json({ success: true, url: blob.url });
+    } else {
+      // Try local file system (development only)
+      const configPath = path.join(process.cwd(), 'public', 'projects', projectCode, 'config.json');
+      const dir = path.dirname(configPath);
+      
+      if (!fs.existsSync(dir)) {
+        fs.mkdirSync(dir, { recursive: true });
+      }
+      
+      // Remove 'source' field before saving
+      const { source, ...configToSave } = config;
+      fs.writeFileSync(configPath, JSON.stringify(configToSave, null, 2));
+      
+      console.log(`[CONFIG PUT] Config saved locally: ${configPath}`);
+      return NextResponse.json({ success: true, path: configPath });
     }
-
-    return NextResponse.json({ error: 'No storage available' }, { status: 500 });
-
   } catch (error) {
-    console.error(`[CONFIG] Error saving config:`, error);
-    return NextResponse.json({ error: 'Failed to save config' }, { status: 500 });
+    console.error(`[CONFIG PUT] Error saving config for ${projectCode}:`, error);
+    return NextResponse.json({ error: 'Failed to save config', details: String(error) }, { status: 500 });
   }
 }
+

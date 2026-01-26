@@ -18,6 +18,18 @@ const COMMON_ICONS = [
   'Bath', 'Car', 'Bus', 'Train', 'Plane', 'Bike', 'ShoppingBag', 'ShoppingCart', 'CreditCard', 'DollarSign'
 ];
 
+// Icons specifically for Scene Info Box metadata
+const METADATA_ICONS = [
+  'Maximize', 'Compass', 'Wind', 'Sun', 'Home', 'Map', 'Ruler', 'Box', 'Layers', 'Thermometer', 'Droplets',
+  'Square', 'LayoutGrid', 'Building', 'Building2', 'DoorOpen', 'DoorClosed', 'Sofa', 'Lamp', 'LampDesk',
+  'Tv', 'Monitor', 'Refrigerator', 'WashingMachine', 'AirVent', 'Heater', 'Fan', 'Lightbulb',
+  'Bath', 'ShowerHead', 'Bed', 'BedDouble', 'BedSingle', 'Armchair', 'Table', 'Table2',
+  'ParkingSquare', 'Car', 'Warehouse', 'Trees', 'TreePine', 'Flower2', 'Mountain', 'Waves',
+  'Eye', 'MapPin', 'Navigation', 'MoveHorizontal', 'MoveVertical', 'ArrowUpDown', 'ArrowLeftRight',
+  'Clock', 'Calendar', 'Star', 'Heart', 'Award', 'Crown', 'Gem', 'Sparkles', 'Zap', 'Flame',
+  'Gauge', 'Percent', 'Hash', 'AtSign', 'Euro', 'DollarSign', 'PoundSterling', 'CircleDot'
+];
+
 const GLASS_PRESETS = [
   { name: 'White', color: '#ffffff', opacity: 0.2 },
   { name: 'Blue', color: '#3b82f6', opacity: 0.8 },
@@ -1066,23 +1078,26 @@ export default function TourEditor({ initialConfig, projectCode }: TourEditorPro
                         <div className="mt-4 pt-4 border-t border-gray-800">
                             <label className="block text-xs text-gray-400 mb-2">Scene Info Box (Top Left)</label>
                             <div className="space-y-2 mb-2">
-                                {activeScene.metadata?.map((meta, idx) => (
-                                    <div key={idx} className="flex items-center gap-2 bg-gray-900 p-1.5 rounded border border-gray-700">
-                                        {meta.icon && <span className="text-xs text-gray-500">[{meta.icon}]</span>}
-                                        <span className="text-xs font-bold" style={{ color: meta.color || '#e2e8f0' }}>{meta.label}:</span>
-                                        <span className="text-xs text-gray-400 truncate flex-1">{meta.value}</span>
-                                        <button 
-                                            onClick={() => {
-                                                const newMeta = [...(activeScene.metadata || [])];
-                                                newMeta.splice(idx, 1);
-                                                handleUpdateScene(activeScene.id, { metadata: newMeta });
-                                            }}
-                                            className="text-red-400 hover:text-red-300"
-                                        >
-                                            <Trash size={12} />
-                                        </button>
-                                    </div>
-                                ))}
+                                {activeScene.metadata?.map((meta, idx) => {
+                                    const MetaIcon = meta.icon ? (LucideIcons as any)[meta.icon] : null;
+                                    return (
+                                        <div key={idx} className="flex items-center gap-2 bg-gray-900 p-1.5 rounded border border-gray-700">
+                                            {MetaIcon && <MetaIcon size={14} className="text-gray-400 flex-shrink-0" />}
+                                            <span className="text-xs font-bold" style={{ color: meta.color || '#e2e8f0' }}>{meta.label}:</span>
+                                            <span className="text-xs text-gray-400 truncate flex-1">{meta.value}</span>
+                                            <button 
+                                                onClick={() => {
+                                                    const newMeta = [...(activeScene.metadata || [])];
+                                                    newMeta.splice(idx, 1);
+                                                    handleUpdateScene(activeScene.id, { metadata: newMeta });
+                                                }}
+                                                className="text-red-400 hover:text-red-300"
+                                            >
+                                                <Trash size={12} />
+                                            </button>
+                                        </div>
+                                    );
+                                })}
                             </div>
                             <div className="flex flex-col gap-2">
                                 <div className="flex gap-1">
@@ -1097,28 +1112,81 @@ export default function TourEditor({ initialConfig, projectCode }: TourEditorPro
                                         className="w-1/2 bg-gray-800 border border-gray-700 rounded px-2 py-1 text-xs"
                                     />
                                 </div>
-                                <div className="flex gap-1">
-                                    <select 
-                                        id="new-meta-icon"
-                                        className="flex-1 bg-gray-800 border border-gray-700 rounded px-2 py-1 text-xs"
-                                    >
-                                        <option value="">No Icon</option>
-                                        {['Maximize', 'Compass', 'Wind', 'Sun', 'Home', 'Map', 'Ruler', 'Box', 'Layers', 'Thermometer', 'Droplets'].map(i => (
-                                            <option key={i} value={i}>{i}</option>
-                                        ))}
-                                    </select>
+                                <div className="flex gap-1 items-center">
+                                    <div className="relative flex-1">
+                                        <button
+                                            type="button"
+                                            id="meta-icon-picker-btn"
+                                            onClick={() => {
+                                                const picker = document.getElementById('meta-icon-picker');
+                                                if (picker) picker.classList.toggle('hidden');
+                                            }}
+                                            className="w-full bg-gray-800 border border-gray-700 rounded px-2 py-1 text-xs flex items-center justify-between gap-2 hover:bg-gray-700"
+                                        >
+                                            <span className="flex items-center gap-2" id="meta-icon-selected-display">
+                                                <X size={14} className="text-gray-500" />
+                                                <span className="text-gray-400">No Icon</span>
+                                            </span>
+                                            <ChevronDown size={12} className="text-gray-500" />
+                                        </button>
+                                        <input type="hidden" id="new-meta-icon" value="" />
+                                        <div 
+                                            id="meta-icon-picker" 
+                                            className="hidden absolute z-50 bottom-full left-0 mb-1 w-64 max-h-48 overflow-y-auto bg-gray-900 border border-gray-700 rounded-lg shadow-xl p-2"
+                                        >
+                                            <div 
+                                                className="flex items-center gap-2 p-1.5 hover:bg-gray-700 rounded cursor-pointer mb-1 border-b border-gray-700 pb-2"
+                                                onClick={() => {
+                                                    (document.getElementById('new-meta-icon') as HTMLInputElement).value = '';
+                                                    const display = document.getElementById('meta-icon-selected-display');
+                                                    if (display) display.innerHTML = '<span class="text-gray-500"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg></span><span class="text-gray-400">No Icon</span>';
+                                                    document.getElementById('meta-icon-picker')?.classList.add('hidden');
+                                                }}
+                                            >
+                                                <X size={16} className="text-gray-500" />
+                                                <span className="text-xs text-gray-400">No Icon</span>
+                                            </div>
+                                            <div className="grid grid-cols-6 gap-1">
+                                                {METADATA_ICONS.map(iconName => {
+                                                    const IconComp = (LucideIcons as any)[iconName];
+                                                    return IconComp ? (
+                                                        <button
+                                                            key={iconName}
+                                                            type="button"
+                                                            onClick={() => {
+                                                                (document.getElementById('new-meta-icon') as HTMLInputElement).value = iconName;
+                                                                const display = document.getElementById('meta-icon-selected-display');
+                                                                if (display) {
+                                                                    display.innerHTML = `<span class="text-blue-400" id="meta-icon-preview"></span><span class="text-gray-300">${iconName}</span>`;
+                                                                    const preview = document.getElementById('meta-icon-preview');
+                                                                    if (preview && IconComp) {
+                                                                        preview.innerHTML = renderToStaticMarkup(<IconComp size={14} />);
+                                                                    }
+                                                                }
+                                                                document.getElementById('meta-icon-picker')?.classList.add('hidden');
+                                                            }}
+                                                            className="p-1.5 hover:bg-gray-700 rounded flex items-center justify-center text-gray-400 hover:text-blue-400 transition-colors"
+                                                            title={iconName}
+                                                        >
+                                                            <IconComp size={16} />
+                                                        </button>
+                                                    ) : null;
+                                                })}
+                                            </div>
+                                        </div>
+                                    </div>
                                     <input 
                                         type="color"
                                         id="new-meta-color"
                                         defaultValue="#e2e8f0"
-                                        className="w-8 h-full bg-transparent border-none p-0 cursor-pointer"
+                                        className="w-8 h-8 bg-transparent border border-gray-700 rounded p-0 cursor-pointer"
                                         title="Select Color"
                                     />
                                     <button 
                                         onClick={() => {
                                             const l = (document.getElementById('new-meta-label') as HTMLInputElement);
                                             const v = (document.getElementById('new-meta-value') as HTMLInputElement);
-                                            const i = (document.getElementById('new-meta-icon') as HTMLSelectElement);
+                                            const i = (document.getElementById('new-meta-icon') as HTMLInputElement);
                                             const c = (document.getElementById('new-meta-color') as HTMLInputElement);
                                             
                                             if (l.value && v.value) {
@@ -1133,9 +1201,12 @@ export default function TourEditor({ initialConfig, projectCode }: TourEditorPro
                                                 v.value = '';
                                                 i.value = '';
                                                 c.value = '#e2e8f0';
+                                                // Reset icon picker display
+                                                const display = document.getElementById('meta-icon-selected-display');
+                                                if (display) display.innerHTML = '<span class="text-gray-500"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg></span><span class="text-gray-400">No Icon</span>';
                                             }
                                         }}
-                                        className="bg-blue-600 hover:bg-blue-500 px-3 rounded text-white flex items-center justify-center"
+                                        className="bg-blue-600 hover:bg-blue-500 px-3 py-1.5 rounded text-white flex items-center justify-center"
                                     >
                                         <Plus size={14} />
                                     </button>

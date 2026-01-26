@@ -145,52 +145,68 @@ export default function TourEditor({ initialConfig, projectCode }: TourEditorPro
                   }
               }
 
-              // Upload images
+              // Upload images one by one to avoid 413 error
               if (imageFiles.length > 0) {
-                  setSaveMessage(`${imageFiles.length} resim yükleniyor...`);
-                  const imageFormData = new FormData();
-                  imageFormData.append('folder', 'images');
-                  for (const file of imageFiles) {
+                  for (let i = 0; i < imageFiles.length; i++) {
+                      const file = imageFiles[i];
+                      setSaveMessage(`Resim yükleniyor: ${i + 1}/${imageFiles.length} - ${file.name}`);
+                      
+                      const imageFormData = new FormData();
+                      imageFormData.append('folder', 'images');
                       imageFormData.append('files', file);
-                  }
 
-                  const imageResponse = await fetch(`/api/projects/${projectCode}/upload-files`, {
-                      method: 'POST',
-                      headers: { 'x-edit-secret': editSecret },
-                      body: imageFormData,
-                  });
+                      const imageResponse = await fetch(`/api/projects/${projectCode}/upload-files`, {
+                          method: 'POST',
+                          headers: { 'x-edit-secret': editSecret },
+                          body: imageFormData,
+                      });
 
-                  if (!imageResponse.ok) {
-                      const err = await imageResponse.json();
-                      throw new Error(err.error || 'Resim yükleme hatası');
+                      if (!imageResponse.ok) {
+                          // Handle non-JSON responses (like 413 errors)
+                          const contentType = imageResponse.headers.get('content-type');
+                          if (contentType && contentType.includes('application/json')) {
+                              const err = await imageResponse.json();
+                              throw new Error(err.error || `Resim yükleme hatası: ${file.name}`);
+                          } else {
+                              const text = await imageResponse.text();
+                              throw new Error(`Resim çok büyük (${(file.size / 1024 / 1024).toFixed(1)}MB): ${file.name}. Max 4.5MB`);
+                          }
+                      }
+                      
+                      const imageResult = await imageResponse.json();
+                      console.log('[SAVE] Image uploaded:', file.name, imageResult);
                   }
-                  
-                  const imageResult = await imageResponse.json();
-                  console.log('[SAVE] Images uploaded:', imageResult);
               }
 
-              // Upload audio
+              // Upload audio one by one
               if (audioFiles.length > 0) {
-                  setSaveMessage(`${audioFiles.length} ses dosyası yükleniyor...`);
-                  const audioFormData = new FormData();
-                  audioFormData.append('folder', 'audio');
-                  for (const file of audioFiles) {
+                  for (let i = 0; i < audioFiles.length; i++) {
+                      const file = audioFiles[i];
+                      setSaveMessage(`Ses yükleniyor: ${i + 1}/${audioFiles.length} - ${file.name}`);
+                      
+                      const audioFormData = new FormData();
+                      audioFormData.append('folder', 'audio');
                       audioFormData.append('files', file);
-                  }
 
-                  const audioResponse = await fetch(`/api/projects/${projectCode}/upload-files`, {
-                      method: 'POST',
-                      headers: { 'x-edit-secret': editSecret },
-                      body: audioFormData,
-                  });
+                      const audioResponse = await fetch(`/api/projects/${projectCode}/upload-files`, {
+                          method: 'POST',
+                          headers: { 'x-edit-secret': editSecret },
+                          body: audioFormData,
+                      });
 
-                  if (!audioResponse.ok) {
-                      const err = await audioResponse.json();
-                      throw new Error(err.error || 'Ses yükleme hatası');
+                      if (!audioResponse.ok) {
+                          const contentType = audioResponse.headers.get('content-type');
+                          if (contentType && contentType.includes('application/json')) {
+                              const err = await audioResponse.json();
+                              throw new Error(err.error || `Ses yükleme hatası: ${file.name}`);
+                          } else {
+                              throw new Error(`Ses dosyası çok büyük (${(file.size / 1024 / 1024).toFixed(1)}MB): ${file.name}. Max 4.5MB`);
+                          }
+                      }
+                      
+                      const audioResult = await audioResponse.json();
+                      console.log('[SAVE] Audio uploaded:', file.name, audioResult);
                   }
-                  
-                  const audioResult = await audioResponse.json();
-                  console.log('[SAVE] Audio uploaded:', audioResult);
               }
 
               setSaveMessage('Config kaydediliyor...');
@@ -206,7 +222,15 @@ export default function TourEditor({ initialConfig, projectCode }: TourEditorPro
               body: JSON.stringify(config),
           });
 
-          const data = await response.json();
+          // Safely parse response
+          let data;
+          const contentType = response.headers.get('content-type');
+          if (contentType && contentType.includes('application/json')) {
+              data = await response.json();
+          } else {
+              const text = await response.text();
+              data = { error: text || `HTTP ${response.status}` };
+          }
 
           if (response.ok) {
               setSaveStatus('success');

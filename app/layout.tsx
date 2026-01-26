@@ -16,9 +16,6 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "Panoromik Gerçeklik",
   description: "360° Panoramik Sanal Tur Uygulaması",
-  icons: {
-    icon: "/SmallLogo.png",
-  },
 };
 
 export default function RootLayout({

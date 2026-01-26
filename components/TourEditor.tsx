@@ -72,6 +72,14 @@ export default function TourEditor({ initialConfig, projectCode }: TourEditorPro
   const isLocalMode = localFiles.size > 0; // Has local files = local mode
   const [viewSavedMessage, setViewSavedMessage] = useState(false);
   
+  // Combine server images with local files for dropdowns
+  const allAvailableImages = [
+    ...availableImages,
+    ...Array.from(localFiles.keys()).filter(name => 
+      /\.(jpg|jpeg|png|webp)$/i.test(name) && !availableImages.includes(name)
+    )
+  ];
+  
   // Server save state
   const [showSaveModal, setShowSaveModal] = useState(false);
   const [editSecret, setEditSecret] = useState('');
@@ -890,7 +898,7 @@ export default function TourEditor({ initialConfig, projectCode }: TourEditorPro
                 className="w-full bg-gray-800 border border-gray-700 rounded px-2 py-1 text-sm"
             >
                 <option value="">Select Image...</option>
-                {availableImages.map(img => (
+                {allAvailableImages.map(img => (
                     <option key={img} value={img}>{img}</option>
                 ))}
             </select>
@@ -929,7 +937,7 @@ export default function TourEditor({ initialConfig, projectCode }: TourEditorPro
                         onChange={e => setNewSceneData({...newSceneData, image: e.target.value})}
                     >
                         <option value="">Select Panorama Image...</option>
-                        {availableImages.map(img => (
+                        {allAvailableImages.map(img => (
                             <option key={img} value={img}>{img}</option>
                         ))}
                     </select>
@@ -988,7 +996,7 @@ export default function TourEditor({ initialConfig, projectCode }: TourEditorPro
                                 onChange={(e) => handleUpdateScene(activeScene.id, { image: e.target.value })}
                                 className="w-full bg-gray-800 border border-gray-700 rounded px-2 py-1 text-sm"
                             >
-                                {availableImages.map(img => (
+                                {allAvailableImages.map(img => (
                                     <option key={img} value={img}>{img}</option>
                                 ))}
                             </select>
@@ -1228,7 +1236,7 @@ export default function TourEditor({ initialConfig, projectCode }: TourEditorPro
                                         className="w-full bg-gray-900 border border-gray-700 rounded px-2 py-1 text-sm mb-2"
                                     >
                                         <option value="">Select Popup Image (Optional)...</option>
-                                        {availableImages.map(img => (
+                                        {allAvailableImages.map(img => (
                                             <option key={img} value={img}>{img}</option>
                                         ))}
                                     </select>

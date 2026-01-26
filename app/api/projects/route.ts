@@ -84,31 +84,50 @@ export async function GET() {
             const response = await fetch(configBlob.url);
             const config = await response.json();
             
-            const firstSceneImage = config.scenes?.[0]?.image;
+            // Başlangıç sahnesini bul (initialSceneId veya ilk sahne)
+            let initialScene = config.scenes?.[0];
+            if (config.initialSceneId && config.scenes) {
+              const foundScene = config.scenes.find((s: any) => s.id === config.initialSceneId);
+              if (foundScene) {
+                initialScene = foundScene;
+              }
+            }
+            
+            const initialSceneImage = initialScene?.image;
             let thumbnail = '';
             
-            // 1. Önce config'deki resmi bulmaya çalış
-            if (firstSceneImage) {
-              const imageBlob = blobs.find(b => 
-                b.pathname.endsWith(`images/${firstSceneImage}`) ||
-                b.pathname.includes(`/images/${firstSceneImage}`) ||
-                b.pathname.endsWith(firstSceneImage)
-              );
+            // Başlangıç sahnesinin resmini bul
+            if (initialSceneImage) {
+              // Dosya adını temizle (sadece dosya adını al)
+              const imageName = initialSceneImage.split('/').pop();
+              
+              const imageBlob = blobs.find(b => {
+                const blobName = b.pathname.split('/').pop();
+                return (
+                  b.pathname.endsWith(`images/${initialSceneImage}`) ||
+                  b.pathname.includes(`/images/${initialSceneImage}`) ||
+                  b.pathname.endsWith(initialSceneImage) ||
+                  blobName === imageName
+                );
+              });
               thumbnail = imageBlob?.url || '';
             }
             
-            // 2. Bulunamazsa projedeki herhangi bir resmi kullan
-            if (!thumbnail) {
-              const anyImageBlob = blobs.find(b => {
-                const lowerPath = b.pathname.toLowerCase();
-                return (
-                  lowerPath.endsWith('.jpg') ||
-                  lowerPath.endsWith('.jpeg') ||
-                  lowerPath.endsWith('.png') ||
-                  lowerPath.endsWith('.webp')
-                ) && !lowerPath.includes('icon') && !lowerPath.includes('logo');
-              });
-              thumbnail = anyImageBlob?.url || '';
+            // Hala bulunamadıysa, scenes içindeki herhangi bir resmi dene
+            if (!thumbnail && config.scenes) {
+              for (const scene of config.scenes) {
+                if (scene.image) {
+                  const imageName = scene.image.split('/').pop();
+                  const imageBlob = blobs.find(b => {
+                    const blobName = b.pathname.split('/').pop();
+                    return blobName === imageName || b.pathname.endsWith(scene.image);
+                  });
+                  if (imageBlob) {
+                    thumbnail = imageBlob.url;
+                    break;
+                  }
+                }
+              }
             }
             
             projects.push({

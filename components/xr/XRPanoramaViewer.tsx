@@ -205,7 +205,14 @@ export default function XRPanoramaViewer({
     if (isVRActive) {
       await endSession();
     } else {
-      await startSession();
+      // Pass renderer directly to ensure it's available
+      const renderer = sceneManagerRef.current?.getRenderer();
+      if (renderer) {
+        await startSession(renderer);
+      } else {
+        console.error('Renderer not available for VR session');
+        setError('VR başlatılamadı - renderer hazır değil');
+      }
     }
   }, [isVRActive, startSession, endSession]);
 

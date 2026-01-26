@@ -21,7 +21,7 @@ export interface UseXRSessionOptions {
 
 export interface UseXRSessionReturn {
   state: XRSessionState;
-  startSession: () => Promise<void>;
+  startSession: (rendererOverride?: THREE.WebGLRenderer) => Promise<void>;
   endSession: () => Promise<void>;
   getSession: () => XRSession | null;
 }
@@ -41,20 +41,42 @@ export function useXRSession(options: UseXRSessionOptions): UseXRSessionReturn {
   const sessionRef = useRef<XRSession | null>(null);
   const isEndingRef = useRef<boolean>(false);
   const isMountedRef = useRef<boolean>(true);
+  const rendererRef = useRef<THREE.WebGLRenderer | null>(renderer);
 
-  // Start XR session
-  const startSession = useCallback(async () => {
-    if (!renderer || state.isActive || state.isStarting || isEndingRef.current) {
-      return;
-    }
+  // Keep renderer ref updated
+  useEffect(() => {
+    rendererRef.current = renderer;
+  }, [renderer]);
 
-    // Check if WebGL context is available
-    const gl = renderer.getContext();
-    if (gl.isContextLost()) {
-      const error = new Error('WebGL context lost - cannot start VR session');
+  // Start XR session - can accept renderer override for cases where ref isn't updated yet
+  const startSession = useCallback(async (rendererOverride?: THREE.WebGLRenderer) => {
+    const activeRenderer = rendererOverride || rendererRef.current || renderer;
+    
+    if (!activeRenderer) {
+      const error = new Error('Renderer not available');
       setState(prev => ({ ...prev, error: error.message }));
       onError?.(error);
       return;
+    }
+    
+    if (state.isActive || state.isStarting || isEndingRef.current) {
+      return;
+    }
+
+    // Check if WebGL context is available - wait for context to be restored if needed
+    const gl = activeRenderer.getContext();
+    if (gl.isContextLost()) {
+      // Wait a bit for context to be restored
+      console.log('WebGL context lost, waiting for restore...');
+      await new Promise(resolve => setTimeout(resolve, 500));
+      
+      // Check again
+      if (gl.isContextLost()) {
+        const error = new Error('WebGL context lost - cannot start VR session');
+        setState(prev => ({ ...prev, error: error.message }));
+        onError?.(error);
+        return;
+      }
     }
 
     if (!navigator.xr) {
@@ -72,6 +94,22 @@ export function useXRSession(options: UseXRSessionOptions): UseXRSessionReturn {
         console.warn('Error ending existing session:', e);
       }
       sessionRef.current = null;
+      // Wait for session to fully end
+      await new Promise(resolve => setTimeout(resolve, 200));
+    }
+
+    // Also check if renderer already has an active XR session
+    if (activeRenderer.xr.isPresenting) {
+      console.warn('Renderer already presenting, ending existing session');
+      try {
+        const existingSession = activeRenderer.xr.getSession();
+        if (existingSession) {
+          await existingSession.end();
+          await new Promise(resolve => setTimeout(resolve, 200));
+        }
+      } catch (e) {
+        console.warn('Error ending existing renderer session:', e);
+      }
     }
 
     setState(prev => ({ ...prev, isStarting: true, error: null }));
@@ -83,6 +121,9 @@ export function useXRSession(options: UseXRSessionOptions): UseXRSessionReturn {
         throw new Error('VR session not supported on this device');
       }
 
+      // Small delay to ensure everything is ready
+      await new Promise(resolve => setTimeout(resolve, 100));
+
       // Request VR session
       const session = await navigator.xr.requestSession('immersive-vr', {
         optionalFeatures: ['local-floor', 'bounded-floor'],
@@ -91,8 +132,8 @@ export function useXRSession(options: UseXRSessionOptions): UseXRSessionReturn {
       sessionRef.current = session;
 
       // Configure renderer for XR
-      renderer.xr.setReferenceSpaceType('local');
-      await renderer.xr.setSession(session);
+      activeRenderer.xr.setReferenceSpaceType('local');
+      await activeRenderer.xr.setSession(session);
 
       // Handle session end
       const handleSessionEnd = () => {

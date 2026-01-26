@@ -194,8 +194,13 @@ export default function TourViewer({ config, projectCode }: TourViewerProps) {
     icon.style.position = 'relative';
     icon.style.zIndex = '10';
     
+    // Apply rotation if set
+    const rotation = args.rotation ?? 0;
+    const baseTransform = args.type === 'scene' ? 'rotateX(60deg)' : '';
+    icon.style.transform = rotation ? `${baseTransform} rotate(${rotation}deg)` : baseTransform;
+    
     icon.className = `rounded-full flex items-center justify-center cursor-pointer transition-transform hover:scale-110 shadow-[0_0_20px_rgba(255,255,255,0.4)] backdrop-blur-md border-2 ${
-      args.type === 'scene' ? '[transform:rotateX(60deg)] border-white/60' : 'border-white/40'
+      args.type === 'scene' ? 'border-white/60' : 'border-white/40'
     }`;
     
     // We can't render React components directly into this DOM node easily without portals

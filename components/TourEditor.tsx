@@ -404,9 +404,14 @@ export default function TourEditor({ initialConfig, projectCode }: TourEditorPro
                 icon.style.backgroundColor = hs.color ? `${hs.color}${opacityHex}` : (hs.type === 'scene' ? 'rgba(255,255,255,0.2)' : 'rgba(59, 130, 246, 0.8)');
                 icon.style.position = 'relative';
                 icon.style.zIndex = '10';
+                
+                // Apply rotation if set
+                const rotation = hs.rotation ?? 0;
+                const baseTransform = hs.type === 'scene' ? 'rotateX(60deg)' : '';
+                icon.style.transform = rotation ? `${baseTransform} rotate(${rotation}deg)` : baseTransform;
 
                 icon.className = `rounded-full flex items-center justify-center border-2 shadow-lg backdrop-blur-md ${
-                    hs.type === 'scene' ? '[transform:rotateX(60deg)] border-white/60' : 'border-white/40'
+                    hs.type === 'scene' ? 'border-white/60' : 'border-white/40'
                 }`;
                 
                 // Icon content
@@ -1507,6 +1512,29 @@ export default function TourEditor({ initialConfig, projectCode }: TourEditorPro
                                                     return { 
                                                         ...s, 
                                                         hotspots: s.hotspots.map(h => h.id === hs.id ? { ...h, opacity: parseFloat(e.target.value) } : h) 
+                                                    };
+                                                }
+                                                return s;
+                                            });
+                                            setConfig({ ...config, scenes: updatedScenes });
+                                        }}
+                                        className="w-full h-1 bg-gray-700 rounded-lg appearance-none cursor-pointer"
+                                    />
+                                </div>
+                                <div className="col-span-2">
+                                    <label className="block text-[10px] text-gray-400 mb-1">Rotation: {hs.rotation ?? 0}°</label>
+                                    <input 
+                                        type="range" 
+                                        min="0" 
+                                        max="360" 
+                                        step="5"
+                                        value={hs.rotation ?? 0}
+                                        onChange={(e) => {
+                                            const updatedScenes = config.scenes.map(s => {
+                                                if (s.id === activeSceneId) {
+                                                    return { 
+                                                        ...s, 
+                                                        hotspots: s.hotspots.map(h => h.id === hs.id ? { ...h, rotation: parseInt(e.target.value) } : h) 
                                                     };
                                                 }
                                                 return s;

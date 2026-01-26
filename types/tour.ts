@@ -16,6 +16,7 @@ export interface Hotspot {
   color?: string; // Hex color
   opacity?: number; // Opacity 0-1
   size?: number; // Scale factor (default 1)
+  rotation?: number; // Rotation in degrees (0-360)
 }
 
 export interface Scene {

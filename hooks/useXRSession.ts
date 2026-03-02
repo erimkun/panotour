@@ -14,8 +14,10 @@ export interface XRSessionState {
 
 export interface UseXRSessionOptions {
   renderer: THREE.WebGLRenderer | null;
+  onBeforeSessionStart?: () => void;
   onSessionStart?: () => void;
   onSessionEnd?: () => void;
+  onSessionFailed?: () => void;
   onError?: (error: Error) => void;
 }
 
@@ -30,7 +32,7 @@ export interface UseXRSessionReturn {
  * Hook to manage WebXR session
  */
 export function useXRSession(options: UseXRSessionOptions): UseXRSessionReturn {
-  const { renderer, onSessionStart, onSessionEnd, onError } = options;
+  const { renderer, onBeforeSessionStart, onSessionStart, onSessionEnd, onSessionFailed, onError } = options;
   
   const [state, setState] = useState<XRSessionState>({
     isActive: false,
@@ -124,12 +126,35 @@ export function useXRSession(options: UseXRSessionOptions): UseXRSessionReturn {
       // Small delay to ensure everything is ready
       await new Promise(resolve => setTimeout(resolve, 100));
 
+      // Stop normal animation loop and signal XR entry before requesting session
+      onBeforeSessionStart?.();
+
       // Request VR session
       const session = await navigator.xr.requestSession('immersive-vr', {
         optionalFeatures: ['local-floor', 'bounded-floor'],
       });
 
       sessionRef.current = session;
+
+      // Wait for WebGL context to be ready (XR session request may cause context loss/restore)
+      const gl = activeRenderer.getContext();
+      if (gl.isContextLost()) {
+        console.log('WebGL context lost after requestSession, waiting for restore...');
+        await new Promise<void>((resolve, reject) => {
+          let timeoutId: ReturnType<typeof setTimeout>;
+          const onRestored = () => {
+            clearTimeout(timeoutId);
+            activeRenderer.domElement.removeEventListener('webglcontextrestored', onRestored);
+            // Give a small delay after restore
+            setTimeout(resolve, 100);
+          };
+          activeRenderer.domElement.addEventListener('webglcontextrestored', onRestored, { once: true });
+          timeoutId = setTimeout(() => {
+            activeRenderer.domElement.removeEventListener('webglcontextrestored', onRestored);
+            reject(new Error('WebGL context restore timed out'));
+          }, 3000);
+        });
+      }
 
       // Configure renderer for XR
       activeRenderer.xr.setReferenceSpaceType('local');
@@ -153,14 +178,23 @@ export function useXRSession(options: UseXRSessionOptions): UseXRSessionReturn {
       }
       onSessionStart?.();
     } catch (error) {
+      // End the session if it was obtained but setup failed
+      if (sessionRef.current) {
+        try {
+          await sessionRef.current.end();
+        } catch (e) {
+          console.warn('Error ending failed XR session:', e);
+        }
+      }
       sessionRef.current = null;
       const errorMessage = error instanceof Error ? error.message : 'Failed to start XR session';
       if (isMountedRef.current) {
         setState({ isActive: false, isStarting: false, error: errorMessage });
       }
+      onSessionFailed?.();
       onError?.(error instanceof Error ? error : new Error(errorMessage));
     }
-  }, [renderer, state.isActive, state.isStarting, onSessionStart, onSessionEnd, onError]);
+  }, [renderer, state.isActive, state.isStarting, onBeforeSessionStart, onSessionStart, onSessionEnd, onSessionFailed, onError]);
 
   // End XR session
   const endSession = useCallback(async () => {

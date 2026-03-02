@@ -1,6 +1,12 @@
 /**
  * useXRSession Hook
  * Single Responsibility: Manage WebXR session lifecycle
+ * 
+ * CRITICAL: The Three.js animation loop (setAnimationLoop) must NEVER be stopped
+ * before calling renderer.xr.setSession(). If setAnimationLoop(null) is called,
+ * Three.js clears its internal animationLoop reference, causing animation.start()
+ * inside setSession() to be a no-op. When the session later ends, animation.stop()
+ * tries context.cancelAnimationFrame() on a null context → crash.
  */
 
 import { useState, useCallback, useRef, useEffect } from 'react';
@@ -14,10 +20,8 @@ export interface XRSessionState {
 
 export interface UseXRSessionOptions {
   renderer: THREE.WebGLRenderer | null;
-  onBeforeSessionStart?: () => void;
   onSessionStart?: () => void;
   onSessionEnd?: () => void;
-  onSessionFailed?: () => void;
   onError?: (error: Error) => void;
 }
 
@@ -29,10 +33,34 @@ export interface UseXRSessionReturn {
 }
 
 /**
+ * Wait for WebGL context to be restored on a renderer's canvas.
+ * Returns a promise that resolves when context is restored, or rejects on timeout.
+ */
+function waitForContextRestore(
+  canvas: HTMLCanvasElement,
+  timeoutMs: number = 5000
+): Promise<void> {
+  return new Promise<void>((resolve, reject) => {
+    let timeoutId: ReturnType<typeof setTimeout>;
+    const onRestored = () => {
+      clearTimeout(timeoutId);
+      canvas.removeEventListener('webglcontextrestored', onRestored);
+      // Small delay after restore to let GPU stabilize
+      setTimeout(resolve, 150);
+    };
+    canvas.addEventListener('webglcontextrestored', onRestored, { once: true });
+    timeoutId = setTimeout(() => {
+      canvas.removeEventListener('webglcontextrestored', onRestored);
+      reject(new Error('WebGL context restore timed out'));
+    }, timeoutMs);
+  });
+}
+
+/**
  * Hook to manage WebXR session
  */
 export function useXRSession(options: UseXRSessionOptions): UseXRSessionReturn {
-  const { renderer, onBeforeSessionStart, onSessionStart, onSessionEnd, onSessionFailed, onError } = options;
+  const { renderer, onSessionStart, onSessionEnd, onError } = options;
   
   const [state, setState] = useState<XRSessionState>({
     isActive: false,
@@ -65,15 +93,13 @@ export function useXRSession(options: UseXRSessionOptions): UseXRSessionReturn {
       return;
     }
 
-    // Check if WebGL context is available - wait for context to be restored if needed
+    // Check if WebGL context is available
     const gl = activeRenderer.getContext();
     if (gl.isContextLost()) {
-      // Wait a bit for context to be restored
       console.log('WebGL context lost, waiting for restore...');
-      await new Promise(resolve => setTimeout(resolve, 500));
-      
-      // Check again
-      if (gl.isContextLost()) {
+      try {
+        await waitForContextRestore(activeRenderer.domElement, 3000);
+      } catch {
         const error = new Error('WebGL context lost - cannot start VR session');
         setState(prev => ({ ...prev, error: error.message }));
         onError?.(error);
@@ -96,7 +122,6 @@ export function useXRSession(options: UseXRSessionOptions): UseXRSessionReturn {
         console.warn('Error ending existing session:', e);
       }
       sessionRef.current = null;
-      // Wait for session to fully end
       await new Promise(resolve => setTimeout(resolve, 200));
     }
 
@@ -123,40 +148,47 @@ export function useXRSession(options: UseXRSessionOptions): UseXRSessionReturn {
         throw new Error('VR session not supported on this device');
       }
 
-      // Small delay to ensure everything is ready
+      // Step 1: Make the GL context XR-compatible BEFORE requesting a session.
+      // This may cause a context loss/restore cycle, but it happens before
+      // Three.js sets up any XR session state, so it's safe.
+      // After this, renderer.xr.setSession() will skip its internal
+      // makeXRCompatible() call since the context is already compatible.
+      console.log('Making WebGL context XR compatible...');
+      try {
+        await (gl as WebGL2RenderingContext).makeXRCompatible();
+      } catch (e) {
+        console.warn('makeXRCompatible warning:', e);
+      }
+
+      // Wait for context restore if makeXRCompatible caused context loss
+      if (gl.isContextLost()) {
+        console.log('Context lost after makeXRCompatible, waiting for restore...');
+        await waitForContextRestore(activeRenderer.domElement, 5000);
+      }
+
+      // Small delay to ensure GPU is fully ready
       await new Promise(resolve => setTimeout(resolve, 100));
 
-      // Stop normal animation loop and signal XR entry before requesting session
-      onBeforeSessionStart?.();
-
-      // Request VR session
+      // Step 2: Request VR session — context should already be XR-compatible
+      // so this should NOT cause another context loss
+      console.log('Requesting XR session...');
       const session = await navigator.xr.requestSession('immersive-vr', {
         optionalFeatures: ['local-floor', 'bounded-floor'],
       });
-
       sessionRef.current = session;
 
-      // Wait for WebGL context to be ready (XR session request may cause context loss/restore)
-      const gl = activeRenderer.getContext();
+      // Step 3: If context was lost during requestSession, wait for restore
       if (gl.isContextLost()) {
-        console.log('WebGL context lost after requestSession, waiting for restore...');
-        await new Promise<void>((resolve, reject) => {
-          let timeoutId: ReturnType<typeof setTimeout>;
-          const onRestored = () => {
-            clearTimeout(timeoutId);
-            activeRenderer.domElement.removeEventListener('webglcontextrestored', onRestored);
-            // Give a small delay after restore
-            setTimeout(resolve, 100);
-          };
-          activeRenderer.domElement.addEventListener('webglcontextrestored', onRestored, { once: true });
-          timeoutId = setTimeout(() => {
-            activeRenderer.domElement.removeEventListener('webglcontextrestored', onRestored);
-            reject(new Error('WebGL context restore timed out'));
-          }, 3000);
-        });
+        console.log('Context lost after requestSession, waiting for restore...');
+        await waitForContextRestore(activeRenderer.domElement, 5000);
       }
 
-      // Configure renderer for XR
+      // Step 4: Configure renderer for XR
+      // IMPORTANT: The animation loop (setAnimationLoop) must still be running
+      // at this point. Three.js's setSession() internally calls animation.start()
+      // which requires animationLoop to be non-null. If it's null, start() is
+      // a no-op, and the subsequent session end will crash in animation.stop().
+      console.log('Setting XR session on renderer...');
       activeRenderer.xr.setReferenceSpaceType('local');
       await activeRenderer.xr.setSession(session);
 
@@ -177,7 +209,9 @@ export function useXRSession(options: UseXRSessionOptions): UseXRSessionReturn {
         setState({ isActive: true, isStarting: false, error: null });
       }
       onSessionStart?.();
+      console.log('XR session started successfully');
     } catch (error) {
+      console.error('XR session setup failed:', error);
       // End the session if it was obtained but setup failed
       if (sessionRef.current) {
         try {
@@ -191,10 +225,9 @@ export function useXRSession(options: UseXRSessionOptions): UseXRSessionReturn {
       if (isMountedRef.current) {
         setState({ isActive: false, isStarting: false, error: errorMessage });
       }
-      onSessionFailed?.();
       onError?.(error instanceof Error ? error : new Error(errorMessage));
     }
-  }, [renderer, state.isActive, state.isStarting, onBeforeSessionStart, onSessionStart, onSessionEnd, onSessionFailed, onError]);
+  }, [renderer, state.isActive, state.isStarting, onSessionStart, onSessionEnd, onError]);
 
   // End XR session
   const endSession = useCallback(async () => {
@@ -203,7 +236,6 @@ export function useXRSession(options: UseXRSessionOptions): UseXRSessionReturn {
     if (sessionRef.current) {
       isEndingRef.current = true;
       try {
-        // Check if session is still valid before ending
         if (sessionRef.current.end) {
           await sessionRef.current.end();
         }

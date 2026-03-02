@@ -34,7 +34,6 @@ export class XRSceneManager {
   private onSceneChange: ((sceneId: string) => void) | null = null;
   private isTransitioning: boolean = false;
   private isDisposed: boolean = false;
-  private isEnteringXR: boolean = false;
   private contextLostHandler: ((event: Event) => void) | null = null;
   private contextRestoredHandler: ((event: Event) => void) | null = null;
 
@@ -61,25 +60,18 @@ export class XRSceneManager {
     window.addEventListener('resize', this.handleResize);
 
     // Handle WebGL context lost/restored
+    // IMPORTANT: Do NOT stop/restart the animation loop here.
+    // The render() method already checks isContextLost() and returns early.
+    // Stopping the animation loop (setAnimationLoop(null)) clears Three.js's
+    // internal animationLoop reference, which breaks XR session setup because
+    // setSession() -> animation.start() becomes a no-op when animationLoop is null.
     this.contextLostHandler = (event: Event) => {
       event.preventDefault();
-      if (this.isEnteringXR) {
-        console.warn('WebGL context lost during XR entry - ignoring (expected)');
-        return;
-      }
-      console.warn('WebGL context lost - stopping animation');
-      this.stopAnimation();
+      console.warn('WebGL context lost - render() will skip frames until restored');
     };
 
     this.contextRestoredHandler = () => {
-      if (this.isEnteringXR) {
-        console.log('WebGL context restored during XR entry - ignoring');
-        return;
-      }
-      console.log('WebGL context restored - restarting animation');
-      if (!this.isDisposed) {
-        this.startAnimation();
-      }
+      console.log('WebGL context restored - rendering will resume automatically');
     };
 
     this.renderer.domElement.addEventListener('webglcontextlost', this.contextLostHandler, false);
@@ -464,14 +456,6 @@ export class XRSceneManager {
   }
 
   /**
-   * Set whether the manager is in the process of entering XR mode.
-   * When true, context lost/restored handlers will not interfere.
-   */
-  setEnteringXR(value: boolean): void {
-    this.isEnteringXR = value;
-  }
-
-  /**
    * Set scene change callback
    */
   setOnSceneChange(callback: (sceneId: string) => void): void {
@@ -539,12 +523,14 @@ export class XRSceneManager {
 
   /**
    * Stop animation loop
+   * WARNING: Only call this during dispose(). Never call before XR entry -
+   * setAnimationLoop(null) clears Three.js's internal animationLoop reference,
+   * which causes setSession() -> animation.start() to be a no-op, leading to
+   * crashes when the XR session ends.
    */
   stopAnimation(): void {
     try {
       if (this.renderer && !this.isDisposed) {
-        // Don't call setAnimationLoop(null) while XR is presenting -
-        // Three.js may try to cancelAnimationFrame on a null session reference
         if (this.renderer.xr.isPresenting) {
           console.warn('Skipping setAnimationLoop(null) while XR is presenting');
           return;

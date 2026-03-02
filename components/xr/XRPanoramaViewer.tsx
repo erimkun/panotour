@@ -51,31 +51,15 @@ export default function XRPanoramaViewer({
   const currentScene = getSceneById(config, currentSceneId);
 
   // XR Session management
+  // IMPORTANT: Do NOT stop the animation loop before entering XR.
+  // Three.js manages the animation context switch internally via setSession().
   const { state: xrSessionState, startSession, endSession } = useXRSession({
     renderer: sceneManagerRef.current?.getRenderer() || null,
-    onBeforeSessionStart: () => {
-      // Signal XR entry to prevent context loss handler interference
-      sceneManagerRef.current?.setEnteringXR(true);
-      // Stop the normal animation loop - XR will manage its own loop
-      sceneManagerRef.current?.stopAnimation();
-    },
     onSessionStart: () => {
-      sceneManagerRef.current?.setEnteringXR(false);
       setIsVRActive(true);
     },
     onSessionEnd: () => {
       setIsVRActive(false);
-      // Restart the normal animation loop after XR session ends
-      if (sceneManagerRef.current) {
-        sceneManagerRef.current.startAnimation();
-      }
-    },
-    onSessionFailed: () => {
-      // XR session failed to start - clear flag and restart normal animation
-      sceneManagerRef.current?.setEnteringXR(false);
-      if (sceneManagerRef.current) {
-        sceneManagerRef.current.startAnimation();
-      }
     },
     onError: (err) => {
       console.error('XR Session error:', err);

@@ -1,9 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 import fs from 'fs';
-import path from 'path';
 import { list, put } from '@vercel/blob';
 import { TourConfig } from '@/types/tour';
 import { checkRateLimit, recordFailedAttempt, resetRateLimit, getClientIP } from '@/utils/rateLimiter';
+import { getProjectStatus } from '@/utils/projects';
+import { ensureProjectDirectory, getProjectConfigPath, getProjectDirectory, readJsonFile, shouldUseLocalProjectStorage } from '@/utils/storage';
 
 export async function GET(
   request: NextRequest,
@@ -15,14 +16,13 @@ export async function GET(
   try {
     console.log(`[CONFIG] Request for project: ${projectCode}`);
 
-    // 1. Try to read from local public/projects first
-    const configPath = path.join(process.cwd(), 'public', 'projects', projectCode, 'config.json');
+    // 1. Try to read from local project storage first
+    const configPath = getProjectConfigPath(projectCode);
     console.log(`[CONFIG] Checking local path: ${configPath}`);
     
     if (fs.existsSync(configPath)) {
       console.log(`[CONFIG] Found local config for ${projectCode}`);
-      const fileContents = fs.readFileSync(configPath, 'utf8');
-      const config = JSON.parse(fileContents);
+      const config = readJsonFile<TourConfig>(configPath);
       return NextResponse.json({ ...config, source: 'local' });
     }
 
@@ -157,12 +157,14 @@ export async function POST(
 
     // Ensure project ID matches
     config.id = projectCode;
+    config.status = getProjectStatus(config);
 
-    // 1. Try to save locally first
-    const projectDir = path.join(process.cwd(), 'public', 'projects', projectCode);
-    const configPath = path.join(projectDir, 'config.json');
+    // 1. Prefer local project storage when explicitly configured or project exists locally
+    const projectDir = getProjectDirectory(projectCode);
+    const configPath = getProjectConfigPath(projectCode);
 
-    if (fs.existsSync(projectDir)) {
+    if (shouldUseLocalProjectStorage(projectCode)) {
+      ensureProjectDirectory(projectCode);
       console.log(`[CONFIG] Saving locally to: ${configPath}`);
       fs.writeFileSync(configPath, JSON.stringify(config, null, 2));
       return NextResponse.json({ success: true, source: 'local' });

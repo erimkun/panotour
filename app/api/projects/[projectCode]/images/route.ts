@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import fs from 'fs';
-import path from 'path';
 import { list } from '@vercel/blob';
+import { resolveProjectPath } from '@/utils/storage';
 
 export async function GET(
   request: Request,
@@ -10,8 +10,8 @@ export async function GET(
   const { projectCode } = await params;
   const images: string[] = [];
 
-  // 1. Try local public/projects first
-  const imagesDir = path.join(process.cwd(), 'public', 'projects', projectCode, 'images');
+  // 1. Try local project storage first
+  const imagesDir = resolveProjectPath(projectCode, 'images');
   if (fs.existsSync(imagesDir)) {
     try {
       const files = fs.readdirSync(imagesDir);

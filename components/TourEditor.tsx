@@ -77,6 +77,8 @@ export default function TourEditor({ initialConfig, projectCode }: TourEditorPro
   const [availableImages, setAvailableImages] = useState<string[]>([]);
   const [showWizard, setShowWizard] = useState(initialConfig.scenes.length === 0);
   const [wizardData, setWizardData] = useState({ name: '', selectedFiles: [] as File[] });
+    const [wizardStatus, setWizardStatus] = useState<'idle' | 'saving' | 'exporting' | 'error'>('idle');
+    const [wizardMessage, setWizardMessage] = useState('');
   
   // Local mode: Store File objects and their preview URLs
   const [localFiles, setLocalFiles] = useState<Map<string, File>>(new Map());
@@ -120,13 +122,18 @@ export default function TourEditor({ initialConfig, projectCode }: TourEditorPro
   useEffect(() => { isPickingRef.current = isPicking; }, [isPicking]);
 
   // Fetch available images
+  const fetchAvailableImages = async () => {
+      try {
+          const res = await fetch(`/api/projects/${projectCode}/images`);
+          const data = await res.json();
+          if (Array.isArray(data)) setAvailableImages(data);
+      } catch (err) {
+          console.error("Failed to load images", err);
+      }
+  };
+
   useEffect(() => {
-      fetch(`/api/projects/${projectCode}/images`)
-          .then(res => res.json())
-          .then(data => {
-              if (Array.isArray(data)) setAvailableImages(data);
-          })
-          .catch(err => console.error("Failed to load images", err));
+      void fetchAvailableImages();
   }, [projectCode]);
 
   // Update VR config within main config (no separate API call - saved with export)
@@ -135,6 +142,44 @@ export default function TourEditor({ initialConfig, projectCode }: TourEditorPro
           ...prev,
           vrConfig: newVRConfig,
       }));
+  };
+
+  const resolveEditorImageUrl = (imagePath: string) => {
+      if (isLocalMode && previewUrls.has(imagePath)) {
+          return previewUrls.get(imagePath)!;
+      }
+
+      if (imagePath.startsWith('http')) {
+          return imagePath;
+      }
+
+      return `/projects/${projectCode}/images/${encodeURIComponent(imagePath)}`;
+  };
+
+  const registerLocalFiles = (files: File[]) => {
+      if (files.length === 0) return;
+
+      const nextLocalFiles = new Map(localFiles);
+      const nextPreviewUrls = new Map(previewUrls);
+
+      files.forEach((file) => {
+          const previousUrl = nextPreviewUrls.get(file.name);
+          if (previousUrl) {
+              URL.revokeObjectURL(previousUrl);
+          }
+
+          nextLocalFiles.set(file.name, file);
+          nextPreviewUrls.set(file.name, URL.createObjectURL(file));
+      });
+
+      setLocalFiles(nextLocalFiles);
+      setPreviewUrls(nextPreviewUrls);
+  };
+
+  const handleEditorImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+      const files = Array.from(e.target.files || []).filter(file => file.type.startsWith('image/'));
+      registerLocalFiles(files);
+      e.target.value = '';
   };
 
   // Save config to server with password (and optionally upload files in local mode)
@@ -255,12 +300,15 @@ export default function TourEditor({ initialConfig, projectCode }: TourEditorPro
           if (response.ok) {
               setSaveStatus('success');
               if (isLocalMode) {
+                  const uploadedImageNames = Array.from(localFiles.keys()).filter(name => /\.(jpg|jpeg|png|webp)$/i.test(name));
                   setSaveMessage(`✓ ${localFiles.size} dosya + config başarıyla kaydedildi!`);
                   // Clear local files after successful upload
                   setLocalFiles(new Map());
                   // Clean up preview URLs
                   previewUrls.forEach(url => URL.revokeObjectURL(url));
                   setPreviewUrls(new Map());
+                  setAvailableImages(prev => Array.from(new Set([...prev, ...uploadedImageNames])));
+                  void fetchAvailableImages();
               } else {
                   setSaveMessage('Config başarıyla kaydedildi!');
               }
@@ -343,11 +391,7 @@ export default function TourEditor({ initialConfig, projectCode }: TourEditorPro
       lastSceneIdRef.current = activeSceneId;
 
       // Get panorama URL: use preview URL if in local mode, otherwise server path
-      const panoramaUrl = isLocalMode && previewUrls.has(scene.image)
-        ? previewUrls.get(scene.image)!
-        : scene.image.startsWith('http') 
-          ? scene.image 
-          : `/projects/${projectCode}/images/${encodeURIComponent(scene.image)}`;
+            const panoramaUrl = resolveEditorImageUrl(scene.image);
 
       viewerInstanceRef.current = window.pannellum.viewer(viewerContainerRef.current, {
         type: 'equirectangular',
@@ -493,10 +537,10 @@ export default function TourEditor({ initialConfig, projectCode }: TourEditorPro
     setWizardData({ ...wizardData, selectedFiles: files });
   };
 
-  const handleCreateProject = async () => {
+    const buildWizardProject = () => {
     if (!wizardData.name.trim()) {
       alert('Lütfen proje adı girin!');
-      return;
+            return null;
     }
     
     // Create scenes from selected files (if any)
@@ -515,6 +559,7 @@ export default function TourEditor({ initialConfig, projectCode }: TourEditorPro
     const newConfig: TourConfig = {
       id: projectCode,
       name: wizardData.name,
+            status: 'draft',
       initialSceneId: scenes.length > 0 ? scenes[0].id : '',
       scenes: scenes
     };
@@ -527,22 +572,55 @@ export default function TourEditor({ initialConfig, projectCode }: TourEditorPro
       newLocalFiles.set(file.name, file);
       newPreviewUrls.set(file.name, URL.createObjectURL(file));
     });
+
+        return {
+            newConfig,
+            newLocalFiles,
+            newPreviewUrls,
+        };
+    };
+
+    const applyWizardProject = (project: {
+        newConfig: TourConfig;
+        newLocalFiles: Map<string, File>;
+        newPreviewUrls: Map<string, string>;
+    }) => {
+        previewUrls.forEach(url => URL.revokeObjectURL(url));
+
+        setLocalFiles(project.newLocalFiles);
+        setPreviewUrls(project.newPreviewUrls);
+        setConfig(project.newConfig);
+        setActiveSceneId(project.newConfig.scenes[0]?.id || '');
+        setShowWizard(false);
+        setWizardStatus('idle');
+        setWizardMessage('');
+    };
+
+    const handleCreateProject = async (mode: 'edit' | 'export' | 'server') => {
+        const project = buildWizardProject();
+        if (!project) {
+            return;
+        }
     
-    setLocalFiles(newLocalFiles);
-    setPreviewUrls(newPreviewUrls);
-    
-    // Set config and exit wizard
-    setConfig(newConfig);
-    setActiveSceneId(scenes.length > 0 ? scenes[0].id : '');
-    setShowWizard(false);
-    
-    // If no files selected, just show editor
-    if (wizardData.selectedFiles.length === 0) {
+        applyWizardProject(project);
+
+        if (mode === 'edit') {
       return;
     }
-    
-    // Auto-download ZIP with config + images
-    await handleExportZIP(newConfig, wizardData.selectedFiles);
+
+        if (mode === 'export') {
+            try {
+                setWizardStatus('exporting');
+                setWizardMessage('ZIP hazırlanıyor...');
+                await handleExportZIP(project.newConfig, wizardData.selectedFiles);
+            } finally {
+                setWizardStatus('idle');
+                setWizardMessage('');
+            }
+            return;
+        }
+
+        setShowSaveModal(true);
   };
 
   const handleExportZIP = async (exportConfig: TourConfig, files: File[]) => {
@@ -832,30 +910,53 @@ export default function TourEditor({ initialConfig, projectCode }: TourEditorPro
                   ))}
                 </div>
               )}
-              <p className="text-xs text-gray-500 mt-2">
+                            <p className="text-xs text-gray-500 mt-2">
                 {wizardData.selectedFiles.length === 0 ? (
-                  <>💡 Resim seçmezsen sadece config.json indirilir. Sonra editörde "Add Scene" ile ekleyebilirsin.</>
+                                    <>💡 Resim seçmezsen boş proje oluşturulur. Sonra editörde "Add Scene" ile ekleyebilirsin.</>
                 ) : (
-                  <>✅ {wizardData.selectedFiles.length} resim seçildi. ZIP dosyası config + resimlerle indirilecek!</>
+                                    <>✅ {wizardData.selectedFiles.length} resim seçildi. İstersen editörde devam et, istersen ZIP indir, istersen direkt sunucuya yaz.</>
                 )}
               </p>
             </div>
 
             {/* Actions */}
-            <div className="flex gap-4 pt-4">
+                        <div className="grid gap-3 pt-4 md:grid-cols-3">
               <button
-                onClick={handleCreateProject}
-                className="flex-1 bg-blue-600 hover:bg-blue-500 text-white font-bold py-3 px-6 rounded-lg transition-colors flex items-center justify-center gap-2"
+                                onClick={() => handleCreateProject('edit')}
+                                className="bg-slate-700 hover:bg-slate-600 text-white font-bold py-3 px-4 rounded-lg transition-colors flex items-center justify-center gap-2"
+                            >
+                                <Eye size={20} />
+                                Editorde Ac
+                            </button>
+                            <button
+                                onClick={() => handleCreateProject('export')}
+                                className="bg-blue-600 hover:bg-blue-500 text-white font-bold py-3 px-4 rounded-lg transition-colors flex items-center justify-center gap-2"
               >
                 <Download size={20} />
-                Config Oluştur ve İndir
+                                ZIP Indir
+                            </button>
+                            <button
+                                onClick={() => handleCreateProject('server')}
+                                className="bg-purple-600 hover:bg-purple-500 text-white font-bold py-3 px-4 rounded-lg transition-colors flex items-center justify-center gap-2"
+                            >
+                                <Upload size={20} />
+                                Sunucuya Yaz
               </button>
             </div>
+
+                        {wizardMessage && (
+                            <div className={`flex items-center gap-2 rounded-lg p-3 text-sm ${
+                                wizardStatus === 'error' ? 'bg-red-900/30 text-red-300' : 'bg-blue-900/30 text-blue-300'
+                            }`}>
+                                {(wizardStatus === 'saving' || wizardStatus === 'exporting') && <Loader2 size={16} className="animate-spin" />}
+                                <span>{wizardMessage}</span>
+                            </div>
+                        )}
           </div>
 
           <div className="mt-6 pt-6 border-t border-gray-700 text-xs text-gray-500 space-y-2">
             <p>💡 <strong>İpucu:</strong> Resim seçmesen de proje oluşturabilirsin! Editör açıldıktan sonra "Add Scene" butonu ile sahne ekleyebilirsin.</p>
-            <p>📥 <strong>Sonra:</strong> İndirilen config.json dosyasını <code className="bg-gray-900 px-1 py-0.5 rounded">public/projects/{projectCode}/</code> klasörüne kopyala ve sayfayı yenile.</p>
+                        <p>📥 <strong>Not:</strong> Sunucuya Yaz seçeneği aktif storage'a yazar. Storage ayarına göre bu local path veya Blob olabilir.</p>
           </div>
         </div>
       </div>
@@ -907,6 +1008,16 @@ export default function TourEditor({ initialConfig, projectCode }: TourEditorPro
                 className="w-full bg-gray-800 border border-gray-700 rounded px-2 py-1 text-sm mb-3"
                 placeholder="Enter project name..."
             />
+
+            <label className="block text-xs text-gray-400 mb-1">Status</label>
+            <select
+                value={config.status || 'published'}
+                onChange={(e) => setConfig({ ...config, status: e.target.value as 'draft' | 'published' })}
+                className="w-full bg-gray-800 border border-gray-700 rounded px-2 py-1 text-sm mb-3"
+            >
+                <option value="draft">Draft</option>
+                <option value="published">Published</option>
+            </select>
             
             <label className="block text-xs text-gray-400 mb-1">Floorplan Image</label>
             <select 
@@ -919,6 +1030,16 @@ export default function TourEditor({ initialConfig, projectCode }: TourEditorPro
                     <option key={img} value={img}>{img}</option>
                 ))}
             </select>
+            <label className="mt-2 flex cursor-pointer items-center justify-center gap-2 rounded border border-dashed border-gray-600 px-3 py-2 text-xs text-gray-300 transition-colors hover:border-blue-500 hover:text-white">
+                <Upload size={14} /> Floorplan PNG/JPG/WEBP Yukle
+                <input
+                    type="file"
+                    accept="image/png,image/jpeg,image/jpg,image/webp"
+                    multiple
+                    onChange={handleEditorImageUpload}
+                    className="hidden"
+                />
+            </label>
         </div>
 
         <div>
@@ -958,6 +1079,16 @@ export default function TourEditor({ initialConfig, projectCode }: TourEditorPro
                             <option key={img} value={img}>{img}</option>
                         ))}
                     </select>
+                    <label className="mb-2 flex cursor-pointer items-center justify-center gap-2 rounded border border-dashed border-gray-600 px-3 py-2 text-xs text-gray-300 transition-colors hover:border-blue-500 hover:text-white">
+                        <Upload size={14} /> Yeni PNG/JPG Yukle
+                        <input
+                            type="file"
+                            accept="image/*"
+                            multiple
+                            onChange={handleEditorImageUpload}
+                            className="hidden"
+                        />
+                    </label>
                     <button onClick={handleAddScene} className="w-full bg-green-600 hover:bg-green-500 py-1 rounded text-sm">
                         Add Scene
                     </button>
@@ -1583,7 +1714,7 @@ export default function TourEditor({ initialConfig, projectCode }: TourEditorPro
                 <p className="text-xs text-gray-400 mb-2">Click on the map to set current scene position.</p>
                 <div className="relative w-full aspect-square bg-gray-800 rounded overflow-hidden border border-gray-700">
                     <img 
-                        src={config.floorplanImage.startsWith('http') ? config.floorplanImage : `/projects/${projectCode}/images/${encodeURIComponent(config.floorplanImage)}`} 
+                        src={resolveEditorImageUrl(config.floorplanImage)} 
                         alt="Floorplan" 
                         className="w-full h-full object-contain"
                         onClick={handleFloorplanClick}
@@ -1737,7 +1868,7 @@ export default function TourEditor({ initialConfig, projectCode }: TourEditorPro
                 </button>
                 <p className="text-xs text-gray-500 text-center">
                     ZIP: Config + dosyalar indir<br/>
-                    Sunucuya: Dosyaları + config'i Blob'a yükle
+                    Sunucuya: Dosyalari + config'i aktif storage'a yukle
                 </p>
               </>
             ) : (
@@ -1793,7 +1924,7 @@ export default function TourEditor({ initialConfig, projectCode }: TourEditorPro
                     Düzenleme şifresini girin.
                   </>
                 ) : (
-                  'Config\'i sunucuya kaydetmek için düzenleme şifresini girin.'
+                                    'Config\'i aktif storage\'a kaydetmek için düzenleme şifresini girin.'
                 )}
               </p>
               
@@ -1848,6 +1979,9 @@ export default function TourEditor({ initialConfig, projectCode }: TourEditorPro
               <p className="text-xs text-gray-500 text-center">
                 💡 Şifre .env dosyasındaki EDIT_SECRET değişkenidir
               </p>
+                            <p className="text-xs text-gray-500 text-center">
+                                Aktif storage: PROJECTS_STORAGE_PATH varsa local klasor, yoksa Blob.
+                            </p>
             </div>
           </div>
         </div>
@@ -1870,6 +2004,7 @@ export default function TourEditor({ initialConfig, projectCode }: TourEditorPro
             activeSceneId={activeSceneId}
             selectedHotspotId={selectedHotspotId}
             projectCode={projectCode}
+                        resolveImageUrl={resolveEditorImageUrl}
             onVRConfigChange={handleVRConfigChange}
           />
         )}

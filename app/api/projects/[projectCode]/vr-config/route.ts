@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import fs from 'fs';
-import path from 'path';
 import { list, put } from '@vercel/blob';
 import { VRConfig, DEFAULT_VR_CONFIG } from '@/types/tour';
+import { ensureProjectDirectory, getProjectDirectory, getProjectVrConfigPath, readJsonFile, shouldUseLocalProjectStorage } from '@/utils/storage';
 
 export async function GET(
   request: NextRequest,
@@ -14,14 +14,13 @@ export async function GET(
   try {
     console.log(`[VR-CONFIG] Request for project: ${projectCode}`);
 
-    // 1. Try to read from local public/projects first
-    const vrConfigPath = path.join(process.cwd(), 'public', 'projects', projectCode, 'vrConfig.json');
+    // 1. Try to read from local project storage first
+    const vrConfigPath = getProjectVrConfigPath(projectCode);
     console.log(`[VR-CONFIG] Checking local path: ${vrConfigPath}`);
     
     if (fs.existsSync(vrConfigPath)) {
       console.log(`[VR-CONFIG] Found local VR config for ${projectCode}`);
-      const fileContents = fs.readFileSync(vrConfigPath, 'utf8');
-      const vrConfig = JSON.parse(fileContents);
+      const vrConfig = readJsonFile<VRConfig>(vrConfigPath);
       return NextResponse.json({ ...vrConfig, source: 'local' });
     }
 
@@ -75,11 +74,12 @@ export async function POST(
       hotspotOverrides: vrConfig.hotspotOverrides || {},
     };
 
-    // 1. Try to save locally first
-    const projectDir = path.join(process.cwd(), 'public', 'projects', projectCode);
-    const vrConfigPath = path.join(projectDir, 'vrConfig.json');
+    // 1. Prefer local project storage when explicitly configured or project exists locally
+    const projectDir = getProjectDirectory(projectCode);
+    const vrConfigPath = getProjectVrConfigPath(projectCode);
     
-    if (fs.existsSync(projectDir)) {
+    if (shouldUseLocalProjectStorage(projectCode)) {
+      ensureProjectDirectory(projectCode);
       console.log(`[VR-CONFIG] Saving locally to: ${vrConfigPath}`);
       fs.writeFileSync(vrConfigPath, JSON.stringify(sanitizedConfig, null, 2));
       return NextResponse.json({ success: true, source: 'local' });
@@ -94,6 +94,7 @@ export async function POST(
         {
           access: 'public',
           contentType: 'application/json',
+          allowOverwrite: true,
         }
       );
       return NextResponse.json({ success: true, source: 'blob', url: blob.url });

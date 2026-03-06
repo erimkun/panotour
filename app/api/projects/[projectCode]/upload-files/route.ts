@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { put } from '@vercel/blob';
 import { checkRateLimit, recordFailedAttempt, resetRateLimit, getClientIP } from '@/utils/rateLimiter';
+import { shouldUseLocalProjectStorage, writeProjectFile } from '@/utils/storage';
 
 /**
  * POST - Upload multiple files (images, audio) for a project
@@ -67,7 +68,7 @@ export async function POST(
 
     // Parse FormData
     const formData = await request.formData();
-    const folder = formData.get('folder') as string || 'images';
+    const folder = (formData.get('folder') as string) === 'audio' ? 'audio' : 'images';
     
     // Get all files
     const files: File[] = [];
@@ -83,20 +84,29 @@ export async function POST(
 
     console.log(`[UPLOAD-FILES] Uploading ${files.length} files for project: ${projectCode}/${folder}`);
 
-    // Check if Blob storage is available
-    if (!process.env.BLOB_READ_WRITE_TOKEN) {
+    // Upload all files to Blob
+    const uploadedFiles: { name: string; url: string }[] = [];
+    const errors: { name: string; error: string }[] = [];
+    const useLocalStorage = shouldUseLocalProjectStorage(projectCode);
+
+    if (!useLocalStorage && !process.env.BLOB_READ_WRITE_TOKEN) {
       return NextResponse.json(
-        { error: 'Blob storage not configured. Set BLOB_READ_WRITE_TOKEN env variable.' },
+        { error: 'No storage configured. Set PROJECTS_STORAGE_PATH or BLOB_READ_WRITE_TOKEN.' },
         { status: 500 }
       );
     }
 
-    // Upload all files to Blob
-    const uploadedFiles: { name: string; url: string }[] = [];
-    const errors: { name: string; error: string }[] = [];
-
     for (const file of files) {
       try {
+        if (useLocalStorage) {
+          const fileBuffer = Buffer.from(await file.arrayBuffer());
+          writeProjectFile(projectCode, `${folder}/${file.name}`, fileBuffer);
+          const fileUrl = `/projects/${projectCode}/${folder}/${encodeURIComponent(file.name)}`;
+          uploadedFiles.push({ name: file.name, url: fileUrl });
+          console.log(`[UPLOAD-FILES] Saved locally: ${file.name} -> ${fileUrl}`);
+          continue;
+        }
+
         const blobPath = `projects/${projectCode}/${folder}/${file.name}`;
         console.log(`[UPLOAD-FILES] Uploading: ${blobPath}`);
 

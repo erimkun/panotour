@@ -1,4 +1,5 @@
 export type HotspotType = 'scene' | 'info';
+export type ProjectStatus = 'draft' | 'published';
 
 export interface Hotspot {
   id: string;
@@ -48,6 +49,7 @@ export interface TourConfig {
   name: string;
   scenes: Scene[];
   initialSceneId: string;
+  status?: ProjectStatus;
   floorplanImage?: string; // Filename of the floorplan image
   minimapSettings?: {
     coneColor?: string;

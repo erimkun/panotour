@@ -1,36 +1,44 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+## Panotour
 
-## Getting Started
+Panotour is a Next.js application for managing and serving panorama tour projects.
 
-First, run the development server:
+## Development
+
+Run the development server:
 
 ```bash
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Open http://localhost:3000 in the browser.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+For live server-side saving, copy `.env.example` into your environment file and set at least `EDIT_SECRET`.
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## Storage Modes
 
-## Learn More
+The app supports both local disk and Vercel Blob.
 
-To learn more about Next.js, take a look at the following resources:
+- If `PROJECTS_STORAGE_PATH` is set, project files are written to that directory.
+- If `PROJECTS_STORAGE_PATH` is not set and `BLOB_READ_WRITE_TOKEN` exists, project files are written to Blob.
+- Reads always try local storage first, then Blob.
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+Example production local path:
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+```bash
+PROJECTS_STORAGE_PATH=/var/www/panotour-data/projects
+```
 
-## Deploy on Vercel
+## Documentation
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+- [Self-hosted Nginx deployment](docs/nginx-self-hosted.md)
+- [Beginner step-by-step Nginx deployment](docs/nginx-step-by-step-beginner.md)
+- [Modeler workflow guide](docs/modeler-workflow.md)
+- [What we built and why](docs/what-we-built.md)
+- [Push / release checklist](docs/push-release-checklist.md)
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+## Deployment Templates
+
+- `.env.production.example`
+- `.env.vercel`
+- `deploy/systemd/panotour.service.example`
+- `deploy/nginx/panotour.conf.example`

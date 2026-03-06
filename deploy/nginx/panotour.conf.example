@@ -1,0 +1,23 @@
+server {
+    listen 80;
+    server_name your-domain.com;
+
+    client_max_body_size 2G;
+
+    location / {
+        proxy_pass http://127.0.0.1:3000;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+
+    # Optional: serve local project assets directly from Nginx.
+    # Only enable if PROJECTS_STORAGE_PATH points to this folder.
+    # location /projects/ {
+    #     alias /var/www/panotour-data/projects/;
+    #     expires 7d;
+    #     add_header Cache-Control "public, max-age=604800, immutable";
+    # }
+}

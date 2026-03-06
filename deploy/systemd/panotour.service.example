@@ -1,0 +1,15 @@
+[Unit]
+Description=Panotour Next.js App
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=/var/www/panotour-app
+ExecStart=/usr/bin/npm run start
+Restart=always
+RestartSec=5
+User=www-data
+EnvironmentFile=/var/www/panotour-app/.env.production
+
+[Install]
+WantedBy=multi-user.target

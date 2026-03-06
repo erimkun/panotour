@@ -18,6 +18,7 @@ interface VRSettingsPanelProps {
   activeSceneId: string;
   selectedHotspotId: string | null;
   projectCode: string;
+  resolveImageUrl?: (imagePath: string) => string;
   onVRConfigChange: (vrConfig: VRConfig) => void;
 }
 
@@ -27,6 +28,7 @@ export default function VRSettingsPanel({
   activeSceneId,
   selectedHotspotId,
   projectCode,
+  resolveImageUrl,
   onVRConfigChange,
 }: VRSettingsPanelProps) {
   const [isExpanded, setIsExpanded] = useState(false);
@@ -346,9 +348,11 @@ export default function VRSettingsPanel({
           originalPitch={previewHotspot.pitch}
           originalYaw={previewHotspot.yaw}
           panoramaUrl={
-            activeScene.image.startsWith('http')
-              ? activeScene.image
-              : `/projects/${projectCode}/images/${encodeURIComponent(activeScene.image)}`
+            resolveImageUrl
+              ? resolveImageUrl(activeScene.image)
+              : activeScene.image.startsWith('http')
+                ? activeScene.image
+                : `/projects/${projectCode}/images/${encodeURIComponent(activeScene.image)}`
           }
           onClose={() => setPreviewHotspot(null)}
           onPitchChange={(pitch) => {

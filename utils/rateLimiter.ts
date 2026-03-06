@@ -1,4 +1,7 @@
+import fs from 'fs';
+import path from 'path';
 import { put, head } from '@vercel/blob';
+import { getRateLimitStoragePath, hasCustomProjectsStoragePath, isBlobStorageConfigured } from '@/utils/storage';
 
 interface RateLimitData {
   attempts: number;
@@ -15,7 +18,34 @@ function getRateLimitKey(ip: string): string {
   return `rate-limits/${safeIp}.json`;
 }
 
+function getLocalRateLimitPath(ip: string): string {
+  const safeIp = ip.replace(/[.:]/g, '_');
+  return path.join(getRateLimitStoragePath(), `${safeIp}.json`);
+}
+
+function shouldUseLocalRateLimitStorage(): boolean {
+  if (hasCustomProjectsStoragePath()) {
+    return true;
+  }
+
+  return !isBlobStorageConfigured();
+}
+
 export async function getRateLimitData(ip: string): Promise<RateLimitData | null> {
+  if (shouldUseLocalRateLimitStorage()) {
+    const filePath = getLocalRateLimitPath(ip);
+
+    if (!fs.existsSync(filePath)) {
+      return null;
+    }
+
+    try {
+      return JSON.parse(fs.readFileSync(filePath, 'utf8')) as RateLimitData;
+    } catch {
+      return null;
+    }
+  }
+
   try {
     const key = getRateLimitKey(ip);
     const blobInfo = await head(key);
@@ -33,6 +63,13 @@ export async function getRateLimitData(ip: string): Promise<RateLimitData | null
 }
 
 export async function setRateLimitData(ip: string, data: RateLimitData): Promise<void> {
+  if (shouldUseLocalRateLimitStorage()) {
+    const filePath = getLocalRateLimitPath(ip);
+    fs.mkdirSync(path.dirname(filePath), { recursive: true });
+    fs.writeFileSync(filePath, JSON.stringify(data));
+    return;
+  }
+
   const key = getRateLimitKey(ip);
   await put(key, JSON.stringify(data), {
     access: 'public',

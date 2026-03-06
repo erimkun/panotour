@@ -2,8 +2,9 @@ import { notFound } from 'next/navigation';
 import TourViewer from '@/components/TourViewer';
 import { TourConfig } from '@/types/tour';
 import fs from 'fs';
-import path from 'path';
 import { list } from '@vercel/blob';
+import { getProjectStatus } from '@/utils/projects';
+import { getProjectConfigPath, readJsonFile } from '@/utils/storage';
 
 interface PageProps {
   params: Promise<{
@@ -15,14 +16,13 @@ async function getProjectConfig(projectCode: string): Promise<TourConfig | null>
   try {
     console.log(`[PAGE] Loading config for ${projectCode}`);
     
-    // 1. Try to read from local public/projects first
-    const configPath = path.join(process.cwd(), 'public', 'projects', projectCode, 'config.json');
+    // 1. Try to read from local project storage first
+    const configPath = getProjectConfigPath(projectCode);
     
     if (fs.existsSync(configPath)) {
       console.log(`[PAGE] Found local config for ${projectCode}`);
-      const fileContents = fs.readFileSync(configPath, 'utf8');
-      const config = JSON.parse(fileContents);
-      return { ...config, source: 'local' };
+      const config = readJsonFile<TourConfig>(configPath);
+      return config;
     }
 
     console.log(`[PAGE] Not found locally, checking Blob...`);
@@ -64,7 +64,7 @@ async function getProjectConfig(projectCode: string): Promise<TourConfig | null>
         }
 
         console.log(`[PAGE] Config loaded successfully for ${projectCode}`);
-        return { ...config, source: 'blob' };
+        return config;
       }
     }
 
@@ -80,7 +80,7 @@ export default async function ProjectPage({ params }: PageProps) {
   const { projectCode } = await params;
   const config = await getProjectConfig(projectCode);
 
-  if (!config) {
+  if (!config || getProjectStatus(config) === 'draft') {
     return notFound();
   }
 

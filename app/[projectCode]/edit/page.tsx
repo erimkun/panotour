@@ -1,8 +1,8 @@
 import fs from 'fs';
-import path from 'path';
 import TourEditor from '@/components/TourEditor';
 import { TourConfig } from '@/types/tour';
 import { list } from '@vercel/blob';
+import { getProjectConfigPath, readJsonFile } from '@/utils/storage';
 
 interface PageProps {
   params: Promise<{
@@ -12,11 +12,10 @@ interface PageProps {
 
 async function getProjectConfig(projectCode: string): Promise<TourConfig | null> {
   try {
-    // 1. Try local public/projects
-    const configPath = path.join(process.cwd(), 'public', 'projects', projectCode, 'config.json');
+    // 1. Try local project storage
+    const configPath = getProjectConfigPath(projectCode);
     if (fs.existsSync(configPath)) {
-      const fileContents = fs.readFileSync(configPath, 'utf8');
-      return JSON.parse(fileContents);
+      return readJsonFile<TourConfig>(configPath);
     }
 
     // 2. Try Vercel Blob if available
@@ -71,6 +70,7 @@ export default async function EditPage({ params }: PageProps) {
     config = {
       id: projectCode,
       name: "",
+      status: 'draft',
       initialSceneId: "",
       scenes: []
     } as TourConfig;

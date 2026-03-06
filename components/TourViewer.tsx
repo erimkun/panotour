@@ -4,9 +4,12 @@ import { useEffect, useRef, useState } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { TourConfig, Hotspot } from '@/types/tour';
 import * as LucideIcons from 'lucide-react';
-import { X } from 'lucide-react';
+import { Volume2, VolumeX, X } from 'lucide-react';
 import clsx from 'clsx';
 import XRButton from './XRButton';
+
+const AMBIENT_AUDIO_SRC = '/Sound.mp3';
+const AMBIENT_AUDIO_VOLUME = 0.12;
 
 // We'll load pannellum via a script tag or dynamic import to avoid SSR issues
 // But for now, let's assume we can import it. If not, we'll fix it.
@@ -25,10 +28,13 @@ interface TourViewerProps {
 export default function TourViewer({ config, projectCode }: TourViewerProps) {
   const viewerContainerRef = useRef<HTMLDivElement>(null);
   const viewerInstanceRef = useRef<any>(null);
-  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const sceneAudioRef = useRef<HTMLAudioElement | null>(null);
+  const ambientAudioRef = useRef<HTMLAudioElement | null>(null);
   const [activePopup, setActivePopup] = useState<Hotspot | null>(null);
   const [currentSceneId, setCurrentSceneId] = useState(config.initialSceneId);
   const [yaw, setYaw] = useState(0);
+  const [isAmbientMuted, setIsAmbientMuted] = useState(false);
+  const [ambientPlaybackBlocked, setAmbientPlaybackBlocked] = useState(false);
 
   const currentScene = config.scenes.find(s => s.id === currentSceneId);
 
@@ -42,11 +48,85 @@ export default function TourViewer({ config, projectCode }: TourViewerProps) {
     return () => clearInterval(interval);
   }, []);
 
+  useEffect(() => {
+    const ambientAudio = new Audio(AMBIENT_AUDIO_SRC);
+    ambientAudio.loop = true;
+    ambientAudio.preload = 'auto';
+    ambientAudio.volume = AMBIENT_AUDIO_VOLUME;
+    ambientAudio.muted = isAmbientMuted;
+
+    const playAmbientAudio = async () => {
+      try {
+        await ambientAudio.play();
+        setAmbientPlaybackBlocked(false);
+      } catch (error) {
+        console.log('Ambient autoplay prevented', error);
+        setAmbientPlaybackBlocked(true);
+      }
+    };
+
+    ambientAudioRef.current = ambientAudio;
+    void playAmbientAudio();
+
+    return () => {
+      ambientAudio.pause();
+      ambientAudioRef.current = null;
+    };
+  }, []);
+
+  useEffect(() => {
+    const ambientAudio = ambientAudioRef.current;
+    if (!ambientAudio) {
+      return;
+    }
+
+    ambientAudio.muted = isAmbientMuted;
+    ambientAudio.volume = isAmbientMuted ? 0 : AMBIENT_AUDIO_VOLUME;
+
+    if (!isAmbientMuted) {
+      const playPromise = ambientAudio.play();
+      if (playPromise !== undefined) {
+        playPromise
+          .then(() => setAmbientPlaybackBlocked(false))
+          .catch((error) => {
+            console.log('Ambient playback blocked', error);
+            setAmbientPlaybackBlocked(true);
+          });
+      }
+    }
+  }, [isAmbientMuted]);
+
+  useEffect(() => {
+    if (!ambientPlaybackBlocked || isAmbientMuted) {
+      return;
+    }
+
+    const resumeAmbientAudio = () => {
+      const ambientAudio = ambientAudioRef.current;
+      if (!ambientAudio) {
+        return;
+      }
+
+      const playPromise = ambientAudio.play();
+      if (playPromise !== undefined) {
+        playPromise
+          .then(() => setAmbientPlaybackBlocked(false))
+          .catch(() => undefined);
+      }
+    };
+
+    window.addEventListener('pointerdown', resumeAmbientAudio, { once: true });
+
+    return () => {
+      window.removeEventListener('pointerdown', resumeAmbientAudio);
+    };
+  }, [ambientPlaybackBlocked, isAmbientMuted]);
+
   // Audio Management
   useEffect(() => {
-      if (audioRef.current) {
-          audioRef.current.pause();
-          audioRef.current = null;
+      if (sceneAudioRef.current) {
+          sceneAudioRef.current.pause();
+          sceneAudioRef.current = null;
       }
 
       const scene = config.scenes.find(s => s.id === currentSceneId);
@@ -67,13 +147,13 @@ export default function TourViewer({ config, projectCode }: TourViewerProps) {
               });
           }
           
-          audioRef.current = newAudio;
+            sceneAudioRef.current = newAudio;
       }
       
       return () => {
-          if (audioRef.current) {
-              audioRef.current.pause();
-              audioRef.current = null;
+            if (sceneAudioRef.current) {
+              sceneAudioRef.current.pause();
+              sceneAudioRef.current = null;
           }
       };
   }, [currentSceneId, config, projectCode]);
@@ -250,11 +330,27 @@ export default function TourViewer({ config, projectCode }: TourViewerProps) {
     <div className="relative w-full h-full bg-black">
       <div ref={viewerContainerRef} className="w-full h-full" />
 
-      {/* VR Mode Button - Bottom Left */}
+      {/* Audio and VR Controls - Bottom Left */}
       <div 
-        className="absolute bottom-4 left-4 z-50"
+        className="absolute bottom-4 left-4 z-50 flex items-end gap-3"
         style={{ bottom: 'calc(1rem + env(safe-area-inset-bottom))' }}
       >
+        <button
+          type="button"
+          onClick={() => setIsAmbientMuted((prev) => !prev)}
+          aria-label={isAmbientMuted ? 'Ortam sesini aç' : 'Ortam sesini kapat'}
+          aria-pressed={!isAmbientMuted}
+          title={isAmbientMuted ? 'Ortam sesini aç' : 'Ortam sesini kapat'}
+          className={clsx(
+            'flex h-11 w-11 items-center justify-center rounded-full border border-white/20 backdrop-blur-md transition-colors',
+            isAmbientMuted
+              ? 'bg-black/45 text-white/80 hover:bg-black/60'
+              : 'bg-white/15 text-white hover:bg-white/20'
+          )}
+        >
+          {isAmbientMuted ? <VolumeX size={18} /> : <Volume2 size={18} />}
+        </button>
+
         <XRButton
           config={config}
           projectCode={projectCode}

@@ -32,6 +32,11 @@ PROJECTS_STORAGE_PATH=/var/www/panotour-data/projects
 
 - [Self-hosted Nginx deployment](docs/nginx-self-hosted.md)
 - [Beginner step-by-step Nginx deployment](docs/nginx-step-by-step-beginner.md)
+- [Deployment platform alternatives](docs/deployment-platform-alternatives.md)
+- [Server deployment scenarios](docs/server-deployment-scenarios.md)
+- [CI/CD options](docs/ci-cd-options.md)
+- [Coolify single VPS beginner deployment](docs/coolify-single-vps-beginner.md)
+- [Dokploy single VPS beginner deployment](docs/dokploy-single-vps-beginner.md)
 - [Modeler workflow guide](docs/modeler-workflow.md)
 - [What we built and why](docs/what-we-built.md)
 - [Push / release checklist](docs/push-release-checklist.md)

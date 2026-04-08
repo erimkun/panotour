@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { put } from '@vercel/blob';
 import { checkRateLimit, recordFailedAttempt, resetRateLimit, getClientIP } from '@/utils/rateLimiter';
 import { shouldUseLocalProjectStorage, writeProjectFile } from '@/utils/storage';
+import { getEditSecret } from '@/utils/runtimeSettings';
 
 /**
  * POST - Upload multiple files (images, audio) for a project
@@ -36,10 +37,10 @@ export async function POST(
     }
 
     // Check if editing is enabled
-    const editSecret = process.env.EDIT_SECRET;
+    const editSecret = getEditSecret();
     if (!editSecret) {
       return NextResponse.json(
-        { error: 'Editing is disabled. Set EDIT_SECRET env variable to enable.' },
+        { error: 'Editing is disabled. Set EDIT_SECRET in admin settings or env.' },
         { status: 403 }
       );
     }

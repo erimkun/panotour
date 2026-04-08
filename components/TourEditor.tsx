@@ -3,11 +3,19 @@
 import { useState, useEffect, useRef } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { TourConfig, Scene, Hotspot, VRConfig, DEFAULT_VR_CONFIG } from '@/types/tour';
-import { Plus, Trash, Map as MapIcon, Info, Download, Eye, Crosshair, Settings, ChevronDown, ChevronUp, Upload, Music, ArrowLeft, Save, X, Lock, CheckCircle, AlertCircle, Loader2 } from 'lucide-react';
+import { Plus, Trash, Map as MapIcon, Info, Download, Eye, Crosshair, Settings, ChevronDown, ChevronUp, Upload, Music, ArrowLeft, Save, X, Lock, CheckCircle, AlertCircle, Loader2, Sparkles } from 'lucide-react';
 import VRSettingsPanel from './VRSettingsPanel';
+import PanoramaCaptureModal from './PanoramaCaptureModal';
+import AIPanoramaModal from './AIPanoramaModal';
 import * as LucideIcons from 'lucide-react';
 import JSZip from 'jszip';
 import { saveAs } from 'file-saver';
+
+interface EditorDraftSnapshot {
+    config: TourConfig;
+    activeSceneId: string;
+    savedAt: number;
+}
 
 // Common icons for selection
 const COMMON_ICONS = [
@@ -54,9 +62,21 @@ interface TourEditorProps {
   projectCode: string;
 }
 
+interface EditorDialog {
+    type: 'info' | 'confirm';
+    title: string;
+    message: string;
+    confirmText?: string;
+    cancelText?: string;
+    onConfirm?: () => void;
+}
+
 export default function TourEditor({ initialConfig, projectCode }: TourEditorProps) {
   const [config, setConfig] = useState<TourConfig>(initialConfig);
   const [activeSceneId, setActiveSceneId] = useState<string>(initialConfig.initialSceneId || (initialConfig.scenes[0]?.id) || '');
+    const [showPanoramaCaptureModal, setShowPanoramaCaptureModal] = useState(false);
+        const [showAIPanoramaModal, setShowAIPanoramaModal] = useState(false);
+    const [editorDialog, setEditorDialog] = useState<EditorDialog | null>(null);
   const [activeIconPicker, setActiveIconPicker] = useState<string | null>(null);
   const viewerContainerRef = useRef<HTMLDivElement>(null);
   const viewerInstanceRef = useRef<any>(null);
@@ -114,12 +134,70 @@ export default function TourEditor({ initialConfig, projectCode }: TourEditorPro
   
   const isPickingRef = useRef(false);
   const lastSceneIdRef = useRef<string>('');
+    const draftStorageKeyRef = useRef(`panotour-editor-draft:${projectCode}`);
+    const lastSavedConfigRef = useRef(JSON.stringify(initialConfig));
+    const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
 
   // Get VR config from main config (or default)
   const vrConfig = config.vrConfig || DEFAULT_VR_CONFIG;
 
   // Sync ref
   useEffect(() => { isPickingRef.current = isPicking; }, [isPicking]);
+
+    // Restore editor draft after unexpected reloads.
+    useEffect(() => {
+        if (typeof window === 'undefined') return;
+
+        const raw = window.sessionStorage.getItem(draftStorageKeyRef.current);
+        if (!raw) return;
+
+        try {
+            const draft = JSON.parse(raw) as EditorDraftSnapshot;
+            if (!draft?.config || draft.config.id !== projectCode) return;
+
+            const hasMeaningfulDiff = JSON.stringify(draft.config) !== lastSavedConfigRef.current;
+            if (!hasMeaningfulDiff) {
+                window.sessionStorage.removeItem(draftStorageKeyRef.current);
+                return;
+            }
+
+            setConfig(draft.config);
+            setActiveSceneId(draft.activeSceneId || draft.config.initialSceneId || draft.config.scenes[0]?.id || '');
+            setShowWizard(draft.config.scenes.length === 0);
+        } catch (err) {
+            console.warn('[EDITOR] Failed to restore draft snapshot:', err);
+            window.sessionStorage.removeItem(draftStorageKeyRef.current);
+        }
+    }, [projectCode]);
+
+    useEffect(() => {
+        const currentConfigSnapshot = JSON.stringify(config);
+        const dirty = currentConfigSnapshot !== lastSavedConfigRef.current || localFiles.size > 0;
+        setHasUnsavedChanges(dirty);
+
+        if (typeof window === 'undefined' || !dirty) {
+            return;
+        }
+
+        const snapshot: EditorDraftSnapshot = {
+            config,
+            activeSceneId,
+            savedAt: Date.now(),
+        };
+        window.sessionStorage.setItem(draftStorageKeyRef.current, JSON.stringify(snapshot));
+    }, [config, activeSceneId, localFiles]);
+
+    useEffect(() => {
+        if (typeof window === 'undefined' || !hasUnsavedChanges) return;
+
+        const handleBeforeUnload = (event: BeforeUnloadEvent) => {
+            event.preventDefault();
+            event.returnValue = '';
+        };
+
+        window.addEventListener('beforeunload', handleBeforeUnload);
+        return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+    }, [hasUnsavedChanges]);
 
   // Fetch available images
   const fetchAvailableImages = async () => {
@@ -311,6 +389,11 @@ export default function TourEditor({ initialConfig, projectCode }: TourEditorPro
                   void fetchAvailableImages();
               } else {
                   setSaveMessage('Config başarıyla kaydedildi!');
+              }
+              lastSavedConfigRef.current = JSON.stringify(config);
+              setHasUnsavedChanges(false);
+              if (typeof window !== 'undefined') {
+                  window.sessionStorage.removeItem(draftStorageKeyRef.current);
               }
               setTimeout(() => {
                   setShowSaveModal(false);
@@ -537,9 +620,14 @@ export default function TourEditor({ initialConfig, projectCode }: TourEditorPro
     setWizardData({ ...wizardData, selectedFiles: files });
   };
 
-    const buildWizardProject = () => {
+        const buildWizardProject = () => {
     if (!wizardData.name.trim()) {
-      alert('Lütfen proje adı girin!');
+            setEditorDialog({
+                    type: 'info',
+                    title: 'Proje Adı Gerekli',
+                    message: 'Devam etmek için lütfen proje adı girin.',
+                    confirmText: 'Tamam',
+            });
             return null;
     }
     
@@ -629,7 +717,12 @@ export default function TourEditor({ initialConfig, projectCode }: TourEditorPro
     // Create project folder
     const projectFolder = zip.folder(projectCode);
     if (!projectFolder) {
-      alert('ZIP oluşturma hatası!');
+            setEditorDialog({
+                    type: 'info',
+                    title: 'ZIP Hatası',
+                    message: 'ZIP oluşturulamadı. Lütfen tekrar deneyin.',
+                    confirmText: 'Tamam',
+            });
       return;
     }
     
@@ -757,18 +850,25 @@ export default function TourEditor({ initialConfig, projectCode }: TourEditorPro
   const activeScene = config.scenes.find(s => s.id === activeSceneId);
 
   const handleDeleteScene = (sceneId: string) => {
-      if (!confirm("Are you sure you want to delete this scene?")) return;
-      
-      const updatedScenes = config.scenes.filter(s => s.id !== sceneId);
-      setConfig({ 
-          ...config, 
-          scenes: updatedScenes,
-          initialSceneId: config.initialSceneId === sceneId ? (updatedScenes[0]?.id || '') : config.initialSceneId
+      setEditorDialog({
+          type: 'confirm',
+          title: 'Sahne Silinsin mi?',
+          message: 'Bu sahneyi silmek istediğinize emin misiniz? Bu işlem geri alınamaz.',
+          confirmText: 'Sil',
+          cancelText: 'Vazgeç',
+          onConfirm: () => {
+              const updatedScenes = config.scenes.filter(s => s.id !== sceneId);
+              setConfig({
+                  ...config,
+                  scenes: updatedScenes,
+                  initialSceneId: config.initialSceneId === sceneId ? (updatedScenes[0]?.id || '') : config.initialSceneId
+              });
+
+              if (activeSceneId === sceneId) {
+                  setActiveSceneId(updatedScenes[0]?.id || '');
+              }
+          },
       });
-      
-      if (activeSceneId === sceneId) {
-          setActiveSceneId(updatedScenes[0]?.id || '');
-      }
   };
 
   const handleUpdateScene = (sceneId: string, updates: Partial<Scene>) => {
@@ -824,6 +924,59 @@ export default function TourEditor({ initialConfig, projectCode }: TourEditorPro
     setIsAddingScene(false);
     setNewSceneData({ id: '', title: '', image: '' });
   };
+
+    const slugifySceneId = (value: string) =>
+        value
+            .toLowerCase()
+            .trim()
+            .replace(/[^a-z0-9]+/g, '-')
+            .replace(/^-+|-+$/g, '');
+
+    const createUniqueSceneId = (baseId: string) => {
+        if (!config.scenes.some(scene => scene.id === baseId)) {
+            return baseId;
+        }
+
+        let suffix = 2;
+        let candidate = `${baseId}-${suffix}`;
+        while (config.scenes.some(scene => scene.id === candidate)) {
+            suffix += 1;
+            candidate = `${baseId}-${suffix}`;
+        }
+        return candidate;
+    };
+
+    const handlePanoramaReady = (file: File, sceneTitle: string) => {
+        registerLocalFiles([file]);
+
+        const normalizedTitle = sceneTitle.trim() || `Kamera Panorama ${config.scenes.length + 1}`;
+        const rawSceneId = slugifySceneId(normalizedTitle) || `camera-scene-${Date.now()}`;
+        const uniqueSceneId = createUniqueSceneId(rawSceneId);
+
+        const newScene: Scene = {
+            id: uniqueSceneId,
+            title: normalizedTitle,
+            image: file.name,
+            hotspots: [],
+            initialView: {
+                pitch: 0,
+                yaw: 0,
+                hfov: 110,
+            },
+        };
+
+        setConfig(prev => ({
+            ...prev,
+            scenes: [...prev.scenes, newScene],
+            initialSceneId: prev.initialSceneId || newScene.id,
+        }));
+
+        setActiveSceneId(newScene.id);
+        setShowPanoramaCaptureModal(false);
+        setShowAIPanoramaModal(false);
+        setIsAddingScene(false);
+        setNewSceneData({ id: '', title: '', image: '' });
+    };
 
   const handleFloorplanClick = (e: React.MouseEvent<HTMLDivElement>) => {
       if (!activeScene) return;
@@ -1047,12 +1200,28 @@ export default function TourEditor({ initialConfig, projectCode }: TourEditorPro
                 <h2 className="text-xl font-bold flex items-center gap-2">
                     <MapIcon size={20} /> Scenes
                 </h2>
-                <button 
-                    onClick={() => setIsAddingScene(!isAddingScene)}
-                    className="p-1 bg-blue-600 rounded hover:bg-blue-500"
-                >
-                    <Plus size={16} />
-                </button>
+                <div className="flex items-center gap-2">
+                    <button
+                        onClick={() => setShowPanoramaCaptureModal(true)}
+                        className="rounded bg-emerald-600 p-1.5 hover:bg-emerald-500"
+                        title="Kameradan 360 panorama olustur"
+                    >
+                        <LucideIcons.Camera size={16} />
+                    </button>
+                    <button
+                        onClick={() => setShowAIPanoramaModal(true)}
+                        className="rounded bg-indigo-600 p-1.5 hover:bg-indigo-500"
+                        title="AI ile coklu fotodan panorama uret"
+                    >
+                        <Sparkles size={16} />
+                    </button>
+                    <button 
+                        onClick={() => setIsAddingScene(!isAddingScene)}
+                        className="p-1 bg-blue-600 rounded hover:bg-blue-500"
+                    >
+                        <Plus size={16} />
+                    </button>
+                </div>
             </div>
 
             {isAddingScene && (
@@ -1987,6 +2156,41 @@ export default function TourEditor({ initialConfig, projectCode }: TourEditorPro
         </div>
       )}
 
+            {/* Unified custom dialog (replaces native alert/confirm) */}
+            {editorDialog && (
+                <div className="fixed inset-0 z-[10001] flex items-center justify-center bg-black/80 p-4">
+                    <div className="w-full max-w-sm overflow-hidden rounded-xl border border-gray-700 bg-gray-900 shadow-2xl">
+                        <div className="border-b border-gray-800 px-5 py-4">
+                            <h3 className="text-sm font-semibold text-white">{editorDialog.title}</h3>
+                            <p className="mt-2 text-xs text-gray-300">{editorDialog.message}</p>
+                        </div>
+
+                        <div className="flex items-center justify-end gap-2 px-5 py-4">
+                            {editorDialog.type === 'confirm' && (
+                                <button
+                                    onClick={() => setEditorDialog(null)}
+                                    className="rounded-lg bg-gray-700 px-3 py-2 text-sm text-gray-200 hover:bg-gray-600"
+                                >
+                                    {editorDialog.cancelText || 'İptal'}
+                                </button>
+                            )}
+                            <button
+                                onClick={() => {
+                                    const confirmAction = editorDialog.onConfirm;
+                                    setEditorDialog(null);
+                                    if (confirmAction) confirmAction();
+                                }}
+                                className={`rounded-lg px-3 py-2 text-sm font-semibold text-white ${
+                                    editorDialog.type === 'confirm' ? 'bg-red-600 hover:bg-red-500' : 'bg-blue-600 hover:bg-blue-500'
+                                }`}
+                            >
+                                {editorDialog.confirmText || 'Tamam'}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
       {/* Viewer Area */}
       <div className="flex-1 relative bg-black">
         <div ref={viewerContainerRef} className={`w-full h-full ${isPicking ? 'cursor-crosshair' : ''}`} />
@@ -2009,6 +2213,18 @@ export default function TourEditor({ initialConfig, projectCode }: TourEditorPro
           />
         )}
       </div>
+
+            <PanoramaCaptureModal
+                open={showPanoramaCaptureModal}
+                onClose={() => setShowPanoramaCaptureModal(false)}
+                onPanoramaReady={handlePanoramaReady}
+            />
+
+            <AIPanoramaModal
+                open={showAIPanoramaModal}
+                onClose={() => setShowAIPanoramaModal(false)}
+                onPanoramaReady={handlePanoramaReady}
+            />
     </div>
   );
 }

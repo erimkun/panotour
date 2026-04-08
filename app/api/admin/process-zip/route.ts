@@ -3,6 +3,7 @@ import JSZip from 'jszip';
 import { put } from '@vercel/blob';
 import { projectExists } from '@/utils/projects';
 import { shouldUseLocalProjectStorage, writeProjectFile } from '@/utils/storage';
+import { getAdminPassword } from '@/utils/runtimeSettings';
 
 // Node.js runtime kullan - JSZip için gerekli
 export const runtime = 'nodejs';
@@ -60,7 +61,8 @@ export async function POST(request: NextRequest) {
     console.log('[PROCESS] Starting process for:', projectCode);
 
     // Şifre kontrolü
-    if (!password || password !== process.env.ADMIN_PASSWORD) {
+    const expectedPassword = getAdminPassword();
+    if (!password || !expectedPassword || password !== expectedPassword) {
       console.error('[PROCESS] Auth failed');
       return NextResponse.json(
         { error: 'Yetkisiz erişim' },

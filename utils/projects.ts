@@ -1,7 +1,7 @@
 import fs from 'fs';
 import { list } from '@vercel/blob';
 import { ProjectStatus } from '@/types/tour';
-import { getProjectConfigPath, getProjectsStoragePath, isBlobStorageConfigured, readJsonFile } from '@/utils/storage';
+import { getProjectsStoragePath, getReadableProjectConfigPath, isBlobStorageConfigured, readJsonFile } from '@/utils/storage';
 
 export interface ProjectSummary {
   id: string;
@@ -16,7 +16,7 @@ export function getProjectStatus(config: { status?: string } | null | undefined)
 }
 
 export async function projectExists(projectCode: string): Promise<boolean> {
-  const localConfigPath = getProjectConfigPath(projectCode);
+  const localConfigPath = getReadableProjectConfigPath(projectCode);
   if (fs.existsSync(localConfigPath)) {
     return true;
   }

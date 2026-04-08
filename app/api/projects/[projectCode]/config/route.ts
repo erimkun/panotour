@@ -4,7 +4,8 @@ import { list, put } from '@vercel/blob';
 import { TourConfig } from '@/types/tour';
 import { checkRateLimit, recordFailedAttempt, resetRateLimit, getClientIP } from '@/utils/rateLimiter';
 import { getProjectStatus } from '@/utils/projects';
-import { ensureProjectDirectory, getProjectConfigPath, getProjectDirectory, readJsonFile, shouldUseLocalProjectStorage } from '@/utils/storage';
+import { ensureProjectDirectory, getProjectConfigPath, getProjectDirectory, getReadableProjectConfigPath, readJsonFile, shouldUseLocalProjectStorage } from '@/utils/storage';
+import { getEditSecret } from '@/utils/runtimeSettings';
 
 export async function GET(
   request: NextRequest,
@@ -17,7 +18,7 @@ export async function GET(
     console.log(`[CONFIG] Request for project: ${projectCode}`);
 
     // 1. Try to read from local project storage first
-    const configPath = getProjectConfigPath(projectCode);
+    const configPath = getReadableProjectConfigPath(projectCode);
     console.log(`[CONFIG] Checking local path: ${configPath}`);
     
     if (fs.existsSync(configPath)) {
@@ -117,10 +118,10 @@ export async function POST(
     }
 
     // Check if editing is enabled
-    const editSecret = process.env.EDIT_SECRET;
+    const editSecret = getEditSecret();
     if (!editSecret) {
       return NextResponse.json(
-        { error: 'Editing is disabled. Set EDIT_SECRET env variable to enable.' },
+        { error: 'Editing is disabled. Set EDIT_SECRET in admin settings or env.' },
         { status: 403 }
       );
     }

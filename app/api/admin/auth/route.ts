@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { getAdminPassword } from '@/utils/runtimeSettings';
 
 export async function POST(request: NextRequest) {
   try {
@@ -8,17 +9,17 @@ export async function POST(request: NextRequest) {
     console.log('[AUTH] Body parsed:', { hasPassword: !!body.password });
     
     const { password } = body;
-    const adminPassword = process.env.ADMIN_PASSWORD;
+    const adminPassword = getAdminPassword();
     
-    console.log('[AUTH] Env check:', { 
+    console.log('[AUTH] Password source check:', {
       hasAdminPassword: !!adminPassword,
-      allEnvKeys: Object.keys(process.env).filter(k => k.includes('ADMIN'))
+      source: 'runtime-settings-or-env'
     });
     
     if (!adminPassword) {
       console.error('[AUTH] Admin password not configured in environment');
       return NextResponse.json(
-        { error: 'Admin şifresi yapılandırılmamış', debug: 'ADMIN_PASSWORD env variable is missing' },
+        { error: 'Admin sifresi yapilandirilmamis', debug: 'ADMIN_PASSWORD runtime/env missing' },
         { status: 500 }
       );
     }

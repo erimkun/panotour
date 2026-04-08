@@ -1,7 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import { NextResponse } from 'next/server';
-import { resolveProjectPath } from '@/utils/storage';
+import { resolveReadableProjectPath } from '@/utils/storage';
 
 const MIME_TYPES: Record<string, string> = {
   '.avif': 'image/avif',
@@ -27,7 +27,7 @@ export async function GET(
   const { projectCode, assetPath } = await params;
 
   try {
-    const filePath = resolveProjectPath(projectCode, ...assetPath);
+    const filePath = resolveReadableProjectPath(projectCode, ...assetPath);
 
     if (!fs.existsSync(filePath) || fs.statSync(filePath).isDirectory()) {
       return new NextResponse('Not Found', { status: 404 });

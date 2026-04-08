@@ -4,7 +4,7 @@ import { TourConfig } from '@/types/tour';
 import fs from 'fs';
 import { list } from '@vercel/blob';
 import { getProjectStatus } from '@/utils/projects';
-import { getProjectConfigPath, readJsonFile } from '@/utils/storage';
+import { getReadableProjectConfigPath, readJsonFile } from '@/utils/storage';
 
 interface PageProps {
   params: Promise<{
@@ -17,7 +17,7 @@ async function getProjectConfig(projectCode: string): Promise<TourConfig | null>
     console.log(`[PAGE] Loading config for ${projectCode}`);
     
     // 1. Try to read from local project storage first
-    const configPath = getProjectConfigPath(projectCode);
+    const configPath = getReadableProjectConfigPath(projectCode);
     
     if (fs.existsSync(configPath)) {
       console.log(`[PAGE] Found local config for ${projectCode}`);

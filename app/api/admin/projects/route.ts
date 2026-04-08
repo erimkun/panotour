@@ -1,10 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { listProjectSummaries } from '@/utils/projects';
+import { getAdminPassword } from '@/utils/runtimeSettings';
 
 export async function GET(request: NextRequest) {
   const adminPassword = request.headers.get('x-admin-password');
+  const expectedPassword = getAdminPassword();
 
-  if (!process.env.ADMIN_PASSWORD || adminPassword !== process.env.ADMIN_PASSWORD) {
+  if (!expectedPassword || adminPassword !== expectedPassword) {
     return NextResponse.json({ error: 'Yetkisiz erişim' }, { status: 401 });
   }
 

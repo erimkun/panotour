@@ -1,5 +1,6 @@
 import { handleUpload, type HandleUploadBody } from '@vercel/blob/client';
 import { NextResponse } from 'next/server';
+import { getAdminPassword } from '@/utils/runtimeSettings';
 
 export async function POST(request: Request): Promise<NextResponse> {
   const body = (await request.json()) as HandleUploadBody;
@@ -23,12 +24,14 @@ export async function POST(request: Request): Promise<NextResponse> {
           throw new Error('Invalid payload');
         }
         
-        console.log('[UPLOAD] Password check:', { 
+        const expectedPassword = getAdminPassword();
+
+        console.log('[UPLOAD] Password check:', {
           hasPassword: !!password, 
-          hasEnvPassword: !!process.env.ADMIN_PASSWORD 
+          hasEnvPassword: !!expectedPassword
         });
         
-        if (!password || password !== process.env.ADMIN_PASSWORD) {
+        if (!password || !expectedPassword || password !== expectedPassword) {
           console.error('[UPLOAD] Auth failed');
           throw new Error('Yetkisiz erişim');
         }

@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import fs from 'fs';
 import { list } from '@vercel/blob';
-import { resolveProjectPath } from '@/utils/storage';
+import { resolveReadableProjectPath } from '@/utils/storage';
 
 export async function GET(
   request: Request,
@@ -11,7 +11,7 @@ export async function GET(
   const images: string[] = [];
 
   // 1. Try local project storage first
-  const imagesDir = resolveProjectPath(projectCode, 'images');
+  const imagesDir = resolveReadableProjectPath(projectCode, 'images');
   if (fs.existsSync(imagesDir)) {
     try {
       const files = fs.readdirSync(imagesDir);

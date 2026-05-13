@@ -35,6 +35,7 @@ export default function TourViewer({ config, projectCode }: TourViewerProps) {
   const [yaw, setYaw] = useState(0);
   const [isAmbientMuted, setIsAmbientMuted] = useState(false);
   const [ambientPlaybackBlocked, setAmbientPlaybackBlocked] = useState(false);
+  const [isTourLoaded, setIsTourLoaded] = useState(false);
 
   const currentScene = config.scenes.find(s => s.id === currentSceneId);
 
@@ -219,6 +220,10 @@ export default function TourViewer({ config, projectCode }: TourViewerProps) {
         scenes: scenes,
       });
 
+      viewerInstanceRef.current.on('load', () => {
+          setIsTourLoaded(true);
+      });
+
       viewerInstanceRef.current.on('scenechange', (id: string) => {
           setCurrentSceneId(id);
           setActivePopup(null);
@@ -327,7 +332,37 @@ export default function TourViewer({ config, projectCode }: TourViewerProps) {
   };
 
   return (
-    <div className="relative w-full h-full bg-black">
+    <div className="relative w-full h-full bg-[#1d1a15]">
+      {/* Custom Ultra-Premium Loading Screen */}
+      <div 
+        className={clsx(
+          "absolute inset-0 z-[100] flex flex-col items-center justify-center bg-[#1d1a15]/90 backdrop-blur-2xl transition-opacity duration-1000 ease-in-out pointer-events-none",
+          isTourLoaded ? "opacity-0" : "opacity-100"
+        )}
+      >
+        <div className="relative flex flex-col items-center animate-fade-in-up">
+          {/* Glowing Aura Background */}
+          <div className="absolute inset-0 w-32 h-32 bg-[#D0BB95]/20 rounded-full blur-3xl animate-pulse" />
+          
+          {/* Modern Spinner */}
+          <div className="relative w-16 h-16 mb-8">
+            <div className="absolute inset-0 rounded-full border-t-2 border-r-2 border-[#D0BB95] opacity-80 animate-spin" style={{ animationDuration: '1.2s' }} />
+            <div className="absolute inset-2 rounded-full border-l-2 border-b-2 border-[#D0BB95]/50 animate-spin" style={{ animationDuration: '2s', animationDirection: 'reverse' }} />
+            <div className="absolute inset-4 bg-[#D0BB95]/10 rounded-full backdrop-blur-md" />
+          </div>
+          
+          {/* Minimalist Text */}
+          <h2 className="text-[#D0BB95] text-sm uppercase tracking-[0.2em] font-medium font-sans">
+            Mekan Yükleniyor
+          </h2>
+          <div className="mt-4 flex gap-1.5 opacity-60">
+            <div className="w-1.5 h-1.5 bg-[#D0BB95] rounded-full animate-bounce" style={{ animationDelay: '0s' }} />
+            <div className="w-1.5 h-1.5 bg-[#D0BB95] rounded-full animate-bounce" style={{ animationDelay: '0.2s' }} />
+            <div className="w-1.5 h-1.5 bg-[#D0BB95] rounded-full animate-bounce" style={{ animationDelay: '0.4s' }} />
+          </div>
+        </div>
+      </div>
+
       <div ref={viewerContainerRef} className="w-full h-full" />
 
       {/* Audio and VR Controls - Bottom Left */}

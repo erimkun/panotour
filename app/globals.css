@@ -47,6 +47,15 @@ body {
   display: none !important;
 }
 
+/* Hide default Pannellum Loading Screen completely in favor of React overlay */
+.pnlm-load-box {
+  display: none !important;
+}
+
+.pnlm-l-box, .pnlm-l-msg {
+  display: none !important;
+}
+
 /* Custom scrollbar for popup description */
 .custom-scrollbar::-webkit-scrollbar {
   width: 6px;

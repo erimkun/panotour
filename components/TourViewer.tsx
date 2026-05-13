@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { TourConfig, Hotspot } from '@/types/tour';
 import * as LucideIcons from 'lucide-react';
-import { Volume2, VolumeX, X } from 'lucide-react';
+import { Volume2, VolumeX, X, Maximize, Minimize } from 'lucide-react';
 import clsx from 'clsx';
 import XRButton from './XRButton';
 
@@ -36,8 +36,29 @@ export default function TourViewer({ config, projectCode }: TourViewerProps) {
   const [isAmbientMuted, setIsAmbientMuted] = useState(false);
   const [ambientPlaybackBlocked, setAmbientPlaybackBlocked] = useState(false);
   const [isTourLoaded, setIsTourLoaded] = useState(false);
+  const [isFullscreen, setIsFullscreen] = useState(false);
+  const containerRef = useRef<HTMLDivElement>(null);
 
   const currentScene = config.scenes.find(s => s.id === currentSceneId);
+
+  useEffect(() => {
+    const handleFullscreenChange = () => {
+      setIsFullscreen(!!document.fullscreenElement);
+    };
+    
+    document.addEventListener('fullscreenchange', handleFullscreenChange);
+    return () => document.removeEventListener('fullscreenchange', handleFullscreenChange);
+  }, []);
+
+  const toggleFullscreen = () => {
+    if (!document.fullscreenElement) {
+      containerRef.current?.requestFullscreen().catch(err => {
+        console.error("Error attempting to enable full-screen mode:", err.message);
+      });
+    } else {
+      document.exitFullscreen();
+    }
+  };
 
   useEffect(() => {
     // Track yaw for minimap radar
@@ -212,7 +233,7 @@ export default function TourViewer({ config, projectCode }: TourViewerProps) {
           firstScene: config.initialSceneId,
           sceneFadeDuration: 1000,
           autoLoad: true,
-          showControls: true,
+          showControls: false, // Default kontrolleri tamamen kapat (zoom, default fullscreen)
           showTitle: false,
           minHfov: isMobile ? 80 : 70, // En yakın zoom (dar açı) - artırıldı
           maxHfov: isMobile ? 100 : 130, // En uzak zoom (geniş açı)
@@ -332,7 +353,7 @@ export default function TourViewer({ config, projectCode }: TourViewerProps) {
   };
 
   return (
-    <div className="relative w-full h-full bg-[#1d1a15]">
+    <div ref={containerRef} className="relative w-full h-full bg-[#1d1a15]">
       {/* Custom Ultra-Premium Loading Screen */}
       <div 
         className={clsx(
@@ -365,11 +386,21 @@ export default function TourViewer({ config, projectCode }: TourViewerProps) {
 
       <div ref={viewerContainerRef} className="w-full h-full" />
 
-      {/* Audio and VR Controls - Bottom Left */}
+      {/* Controls - Bottom Left */}
       <div 
         className="absolute bottom-4 left-4 z-50 flex items-end gap-3"
         style={{ bottom: 'calc(1rem + env(safe-area-inset-bottom))' }}
       >
+        <button
+          type="button"
+          onClick={toggleFullscreen}
+          aria-label={isFullscreen ? 'Tam ekrandan çık' : 'Tam ekran yap'}
+          title={isFullscreen ? 'Tam ekrandan çık' : 'Tam ekran yap'}
+          className="flex h-11 w-11 items-center justify-center rounded-full bg-white/15 border border-white/20 backdrop-blur-md text-white transition-colors hover:bg-white/20"
+        >
+          {isFullscreen ? <Minimize size={18} /> : <Maximize size={18} />}
+        </button>
+
         <button
           type="button"
           onClick={() => setIsAmbientMuted((prev) => !prev)}

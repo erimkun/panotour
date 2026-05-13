@@ -504,10 +504,18 @@ export default function TourViewer({ config, projectCode }: TourViewerProps) {
                           }}
                       >
                           {/* Tooltip: Shown on hover */}
-                          <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1 bg-[#1d1a15]/90 border border-[#D0BB95]/30 text-[#D0BB95] text-[10px] md:text-xs font-medium rounded opacity-0 group-hover:opacity-100 transition-all duration-200 pointer-events-none whitespace-nowrap shadow-xl backdrop-blur-md z-50">
+                          <div className={`absolute bottom-full mb-2 px-2 py-1 bg-[#1d1a15]/90 border border-[#D0BB95]/30 text-[#D0BB95] text-[10px] md:text-xs font-medium rounded opacity-0 group-hover:opacity-100 transition-all duration-200 pointer-events-none whitespace-nowrap shadow-xl backdrop-blur-md z-50 ${
+                              s.floorplanPosition.x < 30 ? 'left-0' : 
+                              s.floorplanPosition.x > 70 ? 'right-0' : 
+                              'left-1/2 -translate-x-1/2'
+                          }`}>
                               {s.title}
                               {/* Arrow pointing down */}
-                              <div className="absolute top-full left-1/2 -translate-x-1/2 border-4 border-transparent border-t-[#D0BB95]/30" />
+                              <div className={`absolute top-full border-4 border-transparent border-t-[#D0BB95]/30 ${
+                                  s.floorplanPosition.x < 30 ? 'left-2' : 
+                                  s.floorplanPosition.x > 70 ? 'right-2' : 
+                                  'left-1/2 -translate-x-1/2'
+                              }`} />
                           </div>
 
                           {/* The interactive dot */}

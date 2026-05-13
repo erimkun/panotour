@@ -496,27 +496,41 @@ export default function TourViewer({ config, projectCode }: TourViewerProps) {
                   {config.scenes.map(s => s.floorplanPosition && (
                       <div 
                           key={s.id}
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            viewerInstanceRef.current?.loadScene(s.id);
-                          }}
-                          className={`absolute w-3 h-3 rounded-full -translate-x-1/2 -translate-y-1/2 border border-white shadow-sm transition-all duration-500 cursor-pointer hover:scale-125 ${
-                              s.id === currentSceneId ? 'bg-blue-500 z-10 ring-4 ring-blue-500/30' : 'bg-red-400 hover:bg-red-300'
-                          }`}
+                          className="absolute z-20 group"
                           style={{ 
                               left: `${s.floorplanPosition.x}%`, 
                               top: `${s.floorplanPosition.y}%`,
-                              transform: `translate(-50%, -50%) rotate(${s.floorplanPosition.rotation || 0}deg)`
+                              transform: 'translate(-50%, -50%)'
                           }}
                       >
-                        {s.id === currentSceneId && (
-                            <div 
-                                className="absolute top-1/2 left-1/2 w-[60px] h-[60px] pointer-events-none"
-                                style={{ 
-                                    transform: `translate(-50%, -50%) rotate(${yaw}deg)`,
-                                    transformOrigin: 'center' 
-                                }}
-                            >
+                          {/* Tooltip: Shown on hover */}
+                          <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1 bg-[#1d1a15]/90 border border-[#D0BB95]/30 text-[#D0BB95] text-[10px] md:text-xs font-medium rounded opacity-0 group-hover:opacity-100 transition-all duration-200 pointer-events-none whitespace-nowrap shadow-xl backdrop-blur-md z-50">
+                              {s.title}
+                              {/* Arrow pointing down */}
+                              <div className="absolute top-full left-1/2 -translate-x-1/2 border-4 border-transparent border-t-[#D0BB95]/30" />
+                          </div>
+
+                          {/* The interactive dot */}
+                          <div
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                viewerInstanceRef.current?.loadScene(s.id);
+                              }}
+                              className={`relative w-3 h-3 md:w-3.5 md:h-3.5 flex items-center justify-center rounded-full border border-white shadow-[0_2px_8px_rgba(0,0,0,0.5)] transition-all duration-300 cursor-pointer group-hover:scale-125 ${
+                                  s.id === currentSceneId ? 'bg-blue-500 ring-4 ring-blue-500/30 set-active-dot' : 'bg-red-400 group-hover:bg-red-300'
+                              }`}
+                              style={{ 
+                                  transform: `rotate(${s.floorplanPosition.rotation || 0}deg)`
+                              }}
+                          >
+                            {s.id === currentSceneId && (
+                                <div 
+                                    className="absolute w-[60px] h-[60px] pointer-events-none"
+                                    style={{ 
+                                        transform: `rotate(${yaw}deg)`,
+                                        transformOrigin: 'center' 
+                                    }}
+                                >
                                 <svg viewBox="0 0 100 100" className="w-full h-full">
                                     <path 
                                         d="M50 50 L15 0 A50 50 0 0 1 85 0 Z" 
@@ -536,6 +550,7 @@ export default function TourViewer({ config, projectCode }: TourViewerProps) {
                                 </svg>
                             </div>
                         )}
+                      </div>
                       </div>
                   ))}
               </div>

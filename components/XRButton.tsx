@@ -57,16 +57,15 @@ export default function XRButton({
       <button
         disabled
         className={`
-          flex items-center gap-2 px-4 py-2 
-          bg-gray-600/50 text-gray-400 
+          flex items-center justify-center p-3
+          bg-gray-700/30 text-gray-500 
           rounded-lg cursor-not-allowed
-          backdrop-blur-md border border-white/10
+          backdrop-blur-md border border-white/5
           ${className}
         `}
         title="VR desteği bu tarayıcıda mevcut değil"
       >
         <Glasses size={20} />
-        <span className="hidden md:inline">VR Desteklenmiyor</span>
       </button>
     );
   }

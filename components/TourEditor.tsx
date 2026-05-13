@@ -55,8 +55,37 @@ interface TourEditorProps {
 }
 
 export default function TourEditor({ initialConfig, projectCode }: TourEditorProps) {
-  const [config, setConfig] = useState<TourConfig>(initialConfig);
-  const [activeSceneId, setActiveSceneId] = useState<string>(initialConfig.initialSceneId || (initialConfig.scenes[0]?.id) || '');
+  const [serverBlobMap] = useState<Map<string, string>>(() => new Map());
+  const [config, setConfig] = useState<TourConfig>(() => {
+      const clean = JSON.parse(JSON.stringify(initialConfig));
+      const extract = (val: string) => {
+          if (val && typeof val === 'string' && val.startsWith('http')) {
+              try {
+                  const url = new URL(val);
+                  const filename = decodeURIComponent(url.pathname.split('/').pop() || val);
+                  serverBlobMap.set(filename, val);
+                  return filename;
+              } catch {
+                  return val;
+              }
+          }
+          return val;
+      };
+      if (clean.scenes) {
+          clean.scenes.forEach((s: any) => {
+              if (s.image) s.image = extract(s.image);
+              if (s.audio) s.audio = extract(s.audio);
+              if (s.hotspots) {
+                  s.hotspots.forEach((h: any) => {
+                      if (h.image) h.image = extract(h.image);
+                  });
+              }
+          });
+      }
+      if (clean.floorplanImage) clean.floorplanImage = extract(clean.floorplanImage);
+      return clean;
+  });
+  const [activeSceneId, setActiveSceneId] = useState<string>(config.initialSceneId || (config.scenes[0]?.id) || '');
   const [activeIconPicker, setActiveIconPicker] = useState<string | null>(null);
   const viewerContainerRef = useRef<HTMLDivElement>(null);
   const viewerInstanceRef = useRef<any>(null);
@@ -147,6 +176,10 @@ export default function TourEditor({ initialConfig, projectCode }: TourEditorPro
   const resolveEditorImageUrl = (imagePath: string) => {
       if (isLocalMode && previewUrls.has(imagePath)) {
           return previewUrls.get(imagePath)!;
+      }
+
+      if (serverBlobMap.has(imagePath)) {
+          return serverBlobMap.get(imagePath)!;
       }
 
       if (imagePath.startsWith('http')) {
